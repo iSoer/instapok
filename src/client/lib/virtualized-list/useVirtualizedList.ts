@@ -86,7 +86,7 @@ export const useVirtualizedList = ({
       return
     }
 
-    updateVisibleRange(element as HTMLElement, true)
+    updateVisibleRange(element as HTMLElement)
 
     element.addEventListener("scroll", onScrollEventCallback)
     element.addEventListener("resize", onScrollEventCallback)
