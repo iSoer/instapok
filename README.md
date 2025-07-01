@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Getting started
 
-## Getting Started
+Docker is preferred for local project development
 
-First, run the development server:
-
+To install using docker, run:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker compose up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Next, from the root of the project, run:
+```bash
+npm run init
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Next, to start the local server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Assignment: Instapoke
+Create a React component for displaying an image feed (like in Instagram). Loading new feed items should occur on scroll.
 
-## Learn More
+You also need to create a simple server that will allow getting images page by page. You can use any programming language or any ready-made server (this part of the task will not be evaluated, however, if you make a convenient and beautiful API this will be a plus).
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+We expect production-level code quality.
+Requirements:
+* You cannot use ready-made libraries for implementing infinite scroll
+* Implementation time is not limited, however, we expect the task to be completed within a reasonable timeframe (several weeks)
+* The project should be implemented in TypeScript
+* We do not provide a design mockup, therefore we will not evaluate the quality of the design
+* Image source is arbitrary, for example, you can use https://github.com/PokeAPI/sprites/tree/master
+* Image size is fixed (you can choose any size, depending on the image source you choose)
+* New images are dynamically loaded on scroll
+* Optional part: If the server can provide search by image meta-information (hashtags), then searching by them is required. Required part: If the server API does not support this, the code should be designed so that this functionality can be added in the future
+* The component should be performant, we will test it by scrolling through a large number of feed items
