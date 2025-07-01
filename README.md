@@ -7,6 +7,11 @@ To install using docker, run:
 docker compose up -d
 ```
 
+Next run:
+```bash
+npm install
+```
+
 Next, from the root of the project, run:
 ```bash
 npm run init
