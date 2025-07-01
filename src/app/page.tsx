@@ -1,103 +1,122 @@
-import Image from "next/image";
+"use client"
+import { usePokemonBank } from "@api/hooks/usePokemonBank"
+import { InstagramSlider } from "@ui/InstagramSlider"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { ListResponseItemType } from "@shared/api/schema/pokemon/list"
+import { twMerge } from "@lib/tailwind-merge"
+import { Sidebar, type FormType } from "@ui/Sidebar"
+import { InstagramImageSlide } from "@ui/InstagramImageSlide"
+import { Loader } from "@ui/Loader"
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [
+    form,
+    setForm
+  ] = useState<FormType>({
+    tags: [],
+    sliderHeight: 500,
+    sliderWidth: 350,
+    slideGapY: 20,
+    containerPaddingY: 40
+  })
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+  const { current: initialSidebarValues } = useRef(form)
+
+  const {
+    data,
+    setSize,
+    isLoading,
+    size,
+    error
+  } = usePokemonBank({ page: 0, limit: 20, tags: form.tags })
+
+  const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === "undefined")
+
+  const itemList = useMemo(() => {
+    if (!data) {
+      return []
+    }
+
+    return data.reduce<ListResponseItemType[]>((acc, item) => {
+      return [
+        ...acc,
+        ...item.data
+      ]
+    }, [])
+  }, [data])
+
+  const onLastItemShowed = useCallback(() => {
+    if (!isLoading && !error) {
+      setSize(size => size + 1)
+    }
+  }, [error, isLoading, setSize])
+
+  const renderItem = useCallback((index: number, itemHeight: number) => {
+    const pokemon = itemList?.[index]
+
+    if (!pokemon) {
+      return <div>Pokemon not found :c</div>
+    }
+
+    return (
+      <InstagramImageSlide
+        itemWidth={form.sliderWidth}
+        itemHeight={itemHeight}
+        item={pokemon}
+        index={index}
+      />
+    )
+  }, [form.sliderWidth, itemList])
+
+  return (
+    <main
+      className={twMerge(
+        "grid grid-cols-[300px_1fr]",
+        "h-dvh"
+      )}
+    >
+      {
+        (() => {
+          if (error) {
+            return (
+              <div className="flex w-full h-full items-center justify-center">
+                Something went wrong :c
+              </div>
+            )
+          }
+          return (
+            <>
+              <Sidebar
+                initialValues={initialSidebarValues}
+                onChange={({ tags, sliderHeight, sliderWidth }) => {
+                  setForm(prev => ({
+                    ...prev,
+                    ...(tags && { tags }),
+                    ...(sliderHeight && { sliderHeight }),
+                    ...(sliderWidth && { sliderWidth })
+                  }))
+                  if (tags) {
+                    setSize(0)
+                  }
+                }}
+              />
+              <section className="flex items-center justify-center relative">
+                { isLoadingMore && <Loader className={twMerge("absolute top-0 left-0")} />}
+                <InstagramSlider
+                  isLoading={isLoading}
+                  onLastItemShowed={onLastItemShowed}
+                  itemHeight={form.sliderHeight}
+                  overScan={2}
+                  slideGapY={form.slideGapY}
+                  containerPaddingY={form.containerPaddingY}
+                  itemsCount={itemList.length}
+                  renderItem={renderItem}
+                />
+              </section>
+            </>
+          )
+        })()
+      }
+    </main>
+  )
 }
