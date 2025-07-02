@@ -6,6 +6,7 @@ import { Loader } from "@components/ui/Loader"
 export type InstagramSliderProps = {
   renderItem: (index: number, itemHeight: number) => ReactNode
   initialLoading: boolean
+  fullScreen?: boolean
   disableSnapMandatory?: boolean
   slideGapY?: number
   containerPaddingY?: number
@@ -23,6 +24,7 @@ export const InstagramSlider = memo(function InstagramSlider({
   onLastItemShowed,
   slideGapY,
   containerPaddingY,
+  fullScreen,
   className
 }: InstagramSliderProps) {
   const parentRef = useRef<HTMLDivElement | null>(null)
@@ -63,10 +65,11 @@ export const InstagramSlider = memo(function InstagramSlider({
         !disableSnapMandatory && [
           "snap-mandatory",
           "snap-y"
-        ]
+        ],
+        fullScreen && "h-dvh"
       )}
       style={{
-        height: `${itemHeight + ((containerPaddingY ?? 0) * 2)}px`,
+        ...(!fullScreen && { height: `${itemHeight + ((containerPaddingY ?? 0) * 2)}px` }),
         scrollPaddingTop: `${containerPaddingY}px`,
         paddingTop: `${containerPaddingY}px`
       }}

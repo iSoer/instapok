@@ -21,7 +21,8 @@ export default function Home() {
     slideGapY: 20,
     containerPaddingY: 40,
     overScan: 10,
-    disableSnapMandatory: false
+    disableSnapMandatory: false,
+    fullScreen: false
   })
 
   const { current: initialSidebarValues } = useRef(form)
@@ -85,7 +86,8 @@ export default function Home() {
     slideGapY,
     containerPaddingY,
     disableSnapMandatory,
-    overScan
+    overScan,
+    fullScreen
   }: SidebarOnChangeValues) => {
     setForm(prev => ({
       ...prev,
@@ -95,7 +97,8 @@ export default function Home() {
       ...(slideGapY && { slideGapY }),
       ...(containerPaddingY && { containerPaddingY }),
       ...(disableSnapMandatory && { disableSnapMandatory }),
-      ...(overScan && { overScan })
+      ...(overScan && { overScan }),
+      ...(fullScreen && { fullScreen })
     }))
     if (tags) {
       setSize(0)
@@ -124,15 +127,17 @@ export default function Home() {
           && <Loader className={twMerge("absolute top-0 left-0")} />
         }
         <InstagramSlider
+          itemsCount={itemList.length}
+          renderItem={renderItem}
           initialLoading={isLoading}
           onLastItemShowed={onLastItemShowed}
+
+          fullScreen={form.fullScreen}
           itemHeight={form.sliderHeight}
           overScan={form.overScan}
           slideGapY={form.slideGapY}
           containerPaddingY={form.containerPaddingY}
-          itemsCount={itemList.length}
           disableSnapMandatory={form.disableSnapMandatory}
-          renderItem={renderItem}
         />
       </section>
     </Layout>

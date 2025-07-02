@@ -58,7 +58,7 @@ export const useVirtualizedList = ({
     )
 
     const totalHeight = computedItemHeight * itemsCount
-    let rerenderOverScan = Math.floor((overScan * 2 + clientHeight / itemHeight) / 2) - 1
+    let rerenderOverScan = Math.floor((overScan * 2 + clientHeight / computedItemHeight) / 2) - 1
 
     rerenderOverScan = listConfig.current.endIndex + rerenderOverScan > itemsCount
       ? rerenderOverScan - (listConfig.current.endIndex + rerenderOverScan - itemsCount)

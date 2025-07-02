@@ -13,6 +13,7 @@ export type FormType = {
   containerPaddingY: number
   overScan: number
   disableSnapMandatory: boolean
+  fullScreen: boolean
 }
 
 export type SidebarOnChangeValues = Partial<FormType>
@@ -133,6 +134,18 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
             onToggle={(checked) => {
               onChange({
                 disableSnapMandatory: checked
+              })
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-8">
+          <div>Enable full screen:</div>
+          <Toggle
+            defaultValue={initialValues.fullScreen}
+            ariaLabel="Enable full screen"
+            onToggle={(checked) => {
+              onChange({
+                fullScreen: checked
               })
             }}
           />
