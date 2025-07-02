@@ -118,7 +118,7 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
           defaultValue={initialValues.overScan}
           onChange={(event) => {
             const overScan = Number(event.currentTarget.value)
-            if (overScan > 2) {
+            if (overScan >= 2) {
               onChange({
                 overScan
               })
