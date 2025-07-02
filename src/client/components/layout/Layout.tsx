@@ -1,7 +1,7 @@
 import { twMerge } from "@lib/tailwind-merge"
 import { memo, ReactNode } from "react"
 
-export const Layout = memo(function Layout({ withSidebar, children }: { withSidebar: boolean, children: ReactNode }) {
+export const Layout = memo(function Layout({ withSidebar, children }: { withSidebar?: boolean, children: ReactNode }) {
   return (
     <main
       className={twMerge(

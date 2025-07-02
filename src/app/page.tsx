@@ -104,9 +104,11 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="flex w-full h-full items-center justify-center">
-        Something went wrong :c
-      </div>
+      <Layout>
+        <div className="flex w-full h-full items-center justify-center">
+          Something went wrong :c
+        </div>
+      </Layout>
     )
   }
 
@@ -129,6 +131,7 @@ export default function Home() {
           slideGapY={form.slideGapY}
           containerPaddingY={form.containerPaddingY}
           itemsCount={itemList.length}
+          disableSnapMandatory={form.disableSnapMandatory}
           renderItem={renderItem}
         />
       </section>

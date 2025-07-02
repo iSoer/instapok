@@ -23,6 +23,11 @@ export const Img = memo(function Img({
     setLoaded
   ] = useState(false)
 
+  const [
+    error,
+    setError
+  ] = useState(false)
+
   return (
     <div
       className={twMerge(
@@ -40,9 +45,15 @@ export const Img = memo(function Img({
       )}
     >
       {!loaded && <div className="animate-pulse absolute z-30 inset-0 bg-white/20" />}
-
+      {error && (
+        <div
+          className="absolute  w-full h-full flex items-center justify-center bg-neutral-800"
+        >
+          Ops, image not found :c
+        </div>
+      )}
       {
-        urlThumbnail && (
+        urlThumbnail && !error && (
           <div
             style={{
               backgroundImage: `url(${urlThumbnail})`,
@@ -82,6 +93,10 @@ export const Img = memo(function Img({
         loading="lazy"
         width={width}
         height={height}
+        onError={() => {
+          setLoaded(true)
+          setError(true)
+        }}
         onLoad={() => {
           setLoaded(true)
         }}
