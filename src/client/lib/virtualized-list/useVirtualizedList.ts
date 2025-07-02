@@ -58,11 +58,22 @@ export const useVirtualizedList = ({
     )
 
     const totalHeight = computedItemHeight * itemsCount
+    let rerenderOverScan = Math.floor((overScan * 2 + clientHeight / itemHeight) / 2) - 1
+
+    rerenderOverScan = listConfig.current.endIndex + rerenderOverScan > itemsCount
+      ? rerenderOverScan - (listConfig.current.endIndex + rerenderOverScan - itemsCount)
+      : rerenderOverScan
+
+    const isRerender
+      = listConfig.current.endIndex != newEndIndex
+        && (
+          newEndIndex >= listConfig.current.endIndex + rerenderOverScan
+          || newEndIndex <= listConfig.current.endIndex - rerenderOverScan
+        )
 
     if (
-      listConfig.current.computedItemHeight !== computedItemHeight
-      || listConfig.current.startIndex !== newStartIndex
-      || listConfig.current.endIndex !== newEndIndex
+      isRerender
+      || listConfig.current.computedItemHeight !== computedItemHeight
       || listConfig.current.totalHeight !== totalHeight
     ) {
       listConfig.current.computedItemHeight = computedItemHeight
@@ -95,6 +106,7 @@ export const useVirtualizedList = ({
       element.removeEventListener("resize", onScrollEventCallback)
     }
   }, [
+    getScrollElement,
     updateVisibleRange,
     onScrollEventCallback
   ])

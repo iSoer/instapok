@@ -55,6 +55,7 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         />
         <Input
           label="Slide width:"
+          type="number"
           defaultValue={initialValues.sliderWidth}
           onChange={(event) => {
             const sliderWidth = Number(event.currentTarget.value)
@@ -73,6 +74,7 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         />
         <Input
           label="Slider item height:"
+          type="number"
           defaultValue={initialValues.sliderHeight}
           onChange={(event) => {
             const sliderHeight = Number(event.currentTarget.value)
@@ -85,6 +87,7 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         />
         <Input
           label="Slider slide gap y:"
+          type="number"
           defaultValue={initialValues.slideGapY}
           onChange={(event) => {
             const slideGapY = Number(event.currentTarget.value)
@@ -97,6 +100,7 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         />
         <Input
           label="Slider container padding y:"
+          type="number"
           defaultValue={initialValues.containerPaddingY}
           onChange={(event) => {
             const containerPaddingY = Number(event.currentTarget.value)
@@ -109,6 +113,8 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         />
         <Input
           label="Slider overscan:"
+          type="number"
+          min="2"
           defaultValue={initialValues.overScan}
           onChange={(event) => {
             const overScan = Number(event.currentTarget.value)

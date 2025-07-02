@@ -20,7 +20,7 @@ export default function Home() {
     sliderWidth: 350,
     slideGapY: 20,
     containerPaddingY: 40,
-    overScan: 2,
+    overScan: 10,
     disableSnapMandatory: false
   })
 
