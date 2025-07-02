@@ -1,11 +1,12 @@
 import { Fragment, memo, ReactNode, useCallback, useEffect, useRef } from "react"
 import { useVirtualizedList, UseVirtualizedListPropsType } from "@lib/virtualized-list/useVirtualizedList"
 import { twMerge, type ClassNameValue } from "@lib/tailwind-merge"
-import { Loader } from "@ui/Loader"
+import { Loader } from "@components/ui/Loader"
 
 export type InstagramSliderProps = {
   renderItem: (index: number, itemHeight: number) => ReactNode
-  isLoading: boolean
+  initialLoading: boolean
+  disableSnapMandatory?: boolean
   slideGapY?: number
   containerPaddingY?: number
   onLastItemShowed?: () => void
@@ -14,8 +15,9 @@ export type InstagramSliderProps = {
 
 export const InstagramSlider = memo(function InstagramSlider({
   renderItem,
-  isLoading,
+  initialLoading,
   itemHeight,
+  disableSnapMandatory,
   itemsCount,
   overScan,
   onLastItemShowed,
@@ -56,9 +58,12 @@ export const InstagramSlider = memo(function InstagramSlider({
       className={twMerge(
         className,
         "hide-scrollbar",
-        "snap-mandatory",
-        "snap-y",
-        "overflow-y-auto"
+        "overflow-y-auto",
+        "w-full",
+        !disableSnapMandatory && [
+          "snap-mandatory",
+          "snap-y"
+        ]
       )}
       style={{
         height: `${itemHeight + ((containerPaddingY ?? 0) * 2)}px`,
@@ -67,54 +72,50 @@ export const InstagramSlider = memo(function InstagramSlider({
       }}
     >
       {
-        (() => {
-          if (isLoading) {
-            return (
-              <div className={twMerge("w-full h-full flex items-center relative justify-center")}>
-                <Loader className={twMerge("absolute top-0 left-0")} />
+        initialLoading
+          ? (
+              <div className={twMerge("w-full h-full flex items-center justify-center")}>
+                <Loader />
               </div>
             )
-          }
-
-          return (
-            <div
-              style={{
-                height: `${totalHeight}px`
-              }}
-            >
+          : (
               <div
                 style={{
-                  transform: `translateY(${computedItemHeight * startIndex}px)`
+                  height: `${totalHeight}px`
                 }}
               >
-                {
-                  getVirtualItems().map(({ index }) => {
-                    return (
-                      <Fragment key={index}>
-                        <div
-                          className={twMerge(
-                            "snap-start",
-                            "snap-always",
-                            "h-fit"
-                          )}
-                        >
-                          {renderItem(index, itemHeight)}
-                        </div>
-                        {
-                          slideGapY && (
-                            <div
-                              style={{ height: `${slideGapY}px` }}
-                            />
-                          )
-                        }
-                      </Fragment>
-                    )
-                  })
-                }
+                <div
+                  style={{
+                    transform: `translateY(${computedItemHeight * startIndex}px)`
+                  }}
+                >
+                  {
+                    getVirtualItems().map(({ index }) => {
+                      return (
+                        <Fragment key={index}>
+                          <div
+                            className={twMerge(
+                              "snap-start",
+                              "snap-always",
+                              "h-fit"
+                            )}
+                          >
+                            {renderItem(index, itemHeight)}
+                          </div>
+                          {
+                            slideGapY && (
+                              <div
+                                style={{ height: `${slideGapY}px` }}
+                              />
+                            )
+                          }
+                        </Fragment>
+                      )
+                    })
+                  }
+                </div>
               </div>
-            </div>
-          )
-        })()
+            )
       }
     </div>
   )

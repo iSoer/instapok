@@ -12,7 +12,7 @@ Next run:
 npm install
 ```
 
-Next, from the root of the project, run:
+Next, for creating mock data in db:
 ```bash
 npm run init
 ```

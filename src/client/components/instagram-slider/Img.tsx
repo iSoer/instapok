@@ -39,6 +39,8 @@ export const Img = memo(function Img({
         "h-full"
       )}
     >
+      {!loaded && <div className="animate-pulse absolute z-30 inset-0 bg-white/20" />}
+
       {
         urlThumbnail && (
           <div

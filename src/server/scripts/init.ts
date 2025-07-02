@@ -77,7 +77,8 @@ async function preparePokemonTableData(imgPath: string, shinyTag: string): Promi
     return
   }
 
-  const webpImgDir = path.resolve("./public/assets/pokemon/images")
-
-  await preparePokemonTableData(webpImgDir, shinyTag)
+  await preparePokemonTableData(
+    path.resolve("./public/uploads/pokemon/images"),
+    shinyTag
+  )
 })()

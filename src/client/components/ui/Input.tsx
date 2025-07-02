@@ -8,8 +8,16 @@ export type InputPropsType = {
 export const Input = memo(function Input({ className, label, ...rest }: InputPropsType) {
   return (
     <div>
-      <label>
-        {label}
+      <label className={twMerge("flex flex-col gap-8")}>
+        <div
+          className={twMerge(
+            "text-sm",
+            "font-light",
+            "uppercase"
+          )}
+        >
+          {label}
+        </div>
         <input
           className={twMerge(
             className,

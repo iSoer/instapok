@@ -1,21 +1,32 @@
 import { memo } from "react"
 import { twMerge } from "@lib/tailwind-merge"
-import { Img } from "@ui/Img"
-import { ListResponseItemType } from "@shared/api/schema/pokemon/list"
+import { Img } from "./Img"
 
-export type InstagramImageSlidePropsType = {
+export type InstagramCardItemType = {
+  url: string
+  thumbnailUrl: string
+  width: number
+  height: number
+  alt: string | null
+  tags?: {
+    id: string
+    name: string
+  }[] | null
+}
+
+export type InstagramCardSlidePropsType<T> = {
   itemHeight: number
   itemWidth: number
-  item: ListResponseItemType
+  item: T
   index?: number
 }
 
-export const InstagramImageSlide = memo(function InstagramImageSlide({
+export const InstagramCardSlide = memo(function InstagramImageSlide<T extends InstagramCardItemType>({
   itemHeight,
   itemWidth,
   item,
   index
-}: InstagramImageSlidePropsType) {
+}: InstagramCardSlidePropsType<T>) {
   return (
     <div
       className={twMerge(
@@ -40,9 +51,13 @@ export const InstagramImageSlide = memo(function InstagramImageSlide({
           className={twMerge(
             "absolute top-0 left-0 z-30",
             "rounded-br",
-            "bg-green-700",
-            "text-neutral-200",
-            "px-5"
+            "bg-green-900",
+            "px-5",
+            "material-shadow",
+            "uppercase",
+            "text-sm",
+            "font-light",
+            "text-neutral-200"
           )}
         >
           Index:
@@ -55,7 +70,10 @@ export const InstagramImageSlide = memo(function InstagramImageSlide({
             "rounded-bl",
             "bg-amber-50",
             "text-neutral-900",
-            "px-5"
+            "px-5",
+            "text-sm",
+            "font-light",
+            "material-shadow"
           )}
         >
           #
@@ -76,9 +94,13 @@ export const InstagramImageSlide = memo(function InstagramImageSlide({
                     key={tag.id}
                     className={twMerge(
                       "rounded-tr rounded-tl",
-                      "bg-yellow-600",
+                      "bg-yellow-900",
                       "text-neutral-50",
-                      "px-5"
+                      "px-5",
+                      "material-shadow",
+                      "text-sm",
+                      "font-light",
+                      "uppercase"
                     )}
                   >
                     {tag.name}
@@ -89,8 +111,8 @@ export const InstagramImageSlide = memo(function InstagramImageSlide({
           )
         }
         <Img
-          url={`/assets/pokemon/images/${item.name}.webp`}
-          urlThumbnail={`/assets/pokemon/thumbnails/${item.name}.thumbnail.webp`}
+          url={item.url}
+          urlThumbnail={item.thumbnailUrl}
           alt={`#${item.alt}`}
           width={item.width}
           height={item.height}

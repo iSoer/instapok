@@ -1,12 +1,14 @@
 "use client"
 import { usePokemonBank } from "@api/hooks/usePokemonBank"
-import { InstagramSlider } from "@ui/InstagramSlider"
 import { useCallback, useMemo, useRef, useState } from "react"
-import { ListResponseItemType } from "@shared/api/schema/pokemon/list"
 import { twMerge } from "@lib/tailwind-merge"
-import { Sidebar, type FormType } from "@ui/Sidebar"
-import { InstagramImageSlide } from "@ui/InstagramImageSlide"
-import { Loader } from "@ui/Loader"
+
+import { Sidebar, type FormType, SidebarOnChangeValues } from "@components/layout/Sidebar"
+import { Layout } from "@components/layout/Layout"
+
+import { InstagramSlider } from "@components/instagram-slider/InstagramSlider"
+import { InstagramCardItemType, InstagramCardSlide } from "@components/instagram-slider/InstagramCardSlide"
+import { Loader } from "@components/ui/Loader"
 
 export default function Home() {
   const [
@@ -17,7 +19,9 @@ export default function Home() {
     sliderHeight: 500,
     sliderWidth: 350,
     slideGapY: 20,
-    containerPaddingY: 40
+    containerPaddingY: 40,
+    overScan: 2,
+    disableSnapMandatory: false
   })
 
   const { current: initialSidebarValues } = useRef(form)
@@ -37,10 +41,16 @@ export default function Home() {
       return []
     }
 
-    return data.reduce<ListResponseItemType[]>((acc, item) => {
+    return data.reduce<InstagramCardItemType[]>((acc, datum) => {
       return [
         ...acc,
-        ...item.data
+        ...datum.data.map((item) => {
+          return {
+            ...item,
+            url: `/uploads/pokemon/images/${item.name}.webp`,
+            thumbnailUrl: `/uploads/pokemon/thumbnails/${item.name}.thumbnail.webp`
+          }
+        })
       ]
     }, [])
   }, [data])
@@ -59,7 +69,7 @@ export default function Home() {
     }
 
     return (
-      <InstagramImageSlide
+      <InstagramCardSlide
         itemWidth={form.sliderWidth}
         itemHeight={itemHeight}
         item={pokemon}
@@ -68,55 +78,60 @@ export default function Home() {
     )
   }, [form.sliderWidth, itemList])
 
+  const onSidebarDataChange = useCallback(({
+    tags,
+    sliderHeight,
+    sliderWidth,
+    slideGapY,
+    containerPaddingY,
+    disableSnapMandatory,
+    overScan
+  }: SidebarOnChangeValues) => {
+    setForm(prev => ({
+      ...prev,
+      ...(tags && { tags }),
+      ...(sliderHeight && { sliderHeight }),
+      ...(sliderWidth && { sliderWidth }),
+      ...(slideGapY && { slideGapY }),
+      ...(containerPaddingY && { containerPaddingY }),
+      ...(disableSnapMandatory && { disableSnapMandatory }),
+      ...(overScan && { overScan })
+    }))
+    if (tags) {
+      setSize(0)
+    }
+  }, [setSize])
+
+  if (error) {
+    return (
+      <div className="flex w-full h-full items-center justify-center">
+        Something went wrong :c
+      </div>
+    )
+  }
+
   return (
-    <main
-      className={twMerge(
-        "grid grid-cols-[300px_1fr]",
-        "h-dvh"
-      )}
-    >
-      {
-        (() => {
-          if (error) {
-            return (
-              <div className="flex w-full h-full items-center justify-center">
-                Something went wrong :c
-              </div>
-            )
-          }
-          return (
-            <>
-              <Sidebar
-                initialValues={initialSidebarValues}
-                onChange={({ tags, sliderHeight, sliderWidth }) => {
-                  setForm(prev => ({
-                    ...prev,
-                    ...(tags && { tags }),
-                    ...(sliderHeight && { sliderHeight }),
-                    ...(sliderWidth && { sliderWidth })
-                  }))
-                  if (tags) {
-                    setSize(0)
-                  }
-                }}
-              />
-              <section className="flex items-center justify-center relative">
-                { isLoadingMore && <Loader className={twMerge("absolute top-0 left-0")} />}
-                <InstagramSlider
-                  isLoading={isLoading}
-                  onLastItemShowed={onLastItemShowed}
-                  itemHeight={form.sliderHeight}
-                  overScan={2}
-                  slideGapY={form.slideGapY}
-                  containerPaddingY={form.containerPaddingY}
-                  itemsCount={itemList.length}
-                  renderItem={renderItem}
-                />
-              </section>
-            </>
-          )
-        })()
-      }
-    </main>
+    <Layout withSidebar>
+      <Sidebar
+        initialValues={initialSidebarValues}
+        onChange={onSidebarDataChange}
+      />
+      <section className="flex items-center justify-center relative">
+        {
+          isLoadingMore
+          && <Loader className={twMerge("absolute top-0 left-0")} />
+        }
+        <InstagramSlider
+          initialLoading={isLoading}
+          onLastItemShowed={onLastItemShowed}
+          itemHeight={form.sliderHeight}
+          overScan={form.overScan}
+          slideGapY={form.slideGapY}
+          containerPaddingY={form.containerPaddingY}
+          itemsCount={itemList.length}
+          renderItem={renderItem}
+        />
+      </section>
+    </Layout>
   )
 }

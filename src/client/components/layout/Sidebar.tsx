@@ -1,7 +1,7 @@
 import { memo } from "react"
 import { twMerge } from "@lib/tailwind-merge"
-import { Select } from "@ui/Select"
-import { Input } from "@ui/Input"
+import { Select } from "@components/ui/Select"
+import { Input } from "@components/ui/Input"
 import { usePokemonTags } from "@api/hooks/usePokemonTags"
 
 export type FormType = {
@@ -10,11 +10,15 @@ export type FormType = {
   sliderWidth: number
   slideGapY: number
   containerPaddingY: number
+  overScan: number
+  disableSnapMandatory: boolean
 }
+
+export type SidebarOnChangeValues = Partial<FormType>
 
 export type SidebarPropsType = {
   initialValues: FormType
-  onChange: (values: Partial<FormType>) => void
+  onChange: (values: SidebarOnChangeValues) => void
 }
 
 export const Sidebar = memo(function Sidebar({ initialValues, onChange }: SidebarPropsType) {
@@ -50,13 +54,13 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
             )}
           />
           <Input
-            label="Change slide width:"
+            label="Slide width:"
             defaultValue={initialValues.sliderWidth}
             onChange={(event) => {
               const sliderWidth = Number(event.currentTarget.value)
               if (sliderWidth > 0) {
                 onChange({
-                  sliderWidth: sliderWidth
+                  sliderWidth
                 })
               }
             }}
@@ -68,13 +72,49 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
             )}
           />
           <Input
-            label="Change slider item height:"
+            label="Slider item height:"
             defaultValue={initialValues.sliderHeight}
             onChange={(event) => {
               const sliderHeight = Number(event.currentTarget.value)
               if (sliderHeight > 0) {
                 onChange({
-                  sliderHeight: sliderHeight
+                  sliderHeight
+                })
+              }
+            }}
+          />
+          <Input
+            label="Slider slide gap y:"
+            defaultValue={initialValues.slideGapY}
+            onChange={(event) => {
+              const slideGapY = Number(event.currentTarget.value)
+              if (slideGapY > 0) {
+                onChange({
+                  slideGapY
+                })
+              }
+            }}
+          />
+          <Input
+            label="Slider container padding y:"
+            defaultValue={initialValues.containerPaddingY}
+            onChange={(event) => {
+              const containerPaddingY = Number(event.currentTarget.value)
+              if (containerPaddingY > 0) {
+                onChange({
+                  containerPaddingY
+                })
+              }
+            }}
+          />
+          <Input
+            label="Slider overscan:"
+            defaultValue={initialValues.overScan}
+            onChange={(event) => {
+              const overScan = Number(event.currentTarget.value)
+              if (overScan > 2) {
+                onChange({
+                  overScan
                 })
               }
             }}
