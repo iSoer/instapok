@@ -96,9 +96,10 @@ export default function Home() {
       ...(sliderWidth && { sliderWidth }),
       ...(slideGapY && { slideGapY }),
       ...(containerPaddingY && { containerPaddingY }),
-      ...(disableSnapMandatory && { disableSnapMandatory }),
       ...(overScan && { overScan }),
-      ...(fullScreen && { fullScreen })
+
+      ...(typeof disableSnapMandatory !== "undefined" && { disableSnapMandatory }),
+      ...(typeof fullScreen !== "undefined" && { fullScreen })
     }))
     if (tags) {
       setSize(0)
