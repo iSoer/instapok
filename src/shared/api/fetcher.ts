@@ -4,9 +4,9 @@ export const fetchFn = async <TResponse, TRequest>({
   method,
   signal
 }: {
-  payload?: TRequest
   url: string
   method: "GET" | "POST" | "DELETE" | "PATCH"
+  payload?: TRequest
   signal?: AbortSignal
 }) => {
   const response = await fetch(url, {

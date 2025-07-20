@@ -1,13 +1,18 @@
 "use client"
-import { useCallback, useEffect, useReducer, useRef } from "react"
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef
+} from "react"
 
 export type UseVirtualizedListPropsType = {
   getScrollElement: () => HTMLElement | null
 
   itemsCount: number
-  itemHeight: number
+  itemSize: number
+  horizontal?: boolean
   overScan?: number
-  gapY?: number
 }
 
 const DEFAULT_OVERSCAN = 2 as const
@@ -15,50 +20,73 @@ const DEFAULT_OVERSCAN = 2 as const
 export const useVirtualizedList = ({
   itemsCount,
   getScrollElement,
-  gapY,
+  horizontal = false,
   overScan = DEFAULT_OVERSCAN,
-  itemHeight
+  itemSize
 }: UseVirtualizedListPropsType) => {
   const rerender = useReducer(() => ({}), {})[1]
 
   const listConfig = useRef<{
-    computedItemHeight: number
+    computedItemSize: number
     startIndex: number
     endIndex: number
-    totalHeight: number
+    totalSize: number
   }>({
-    computedItemHeight: 0,
+    computedItemSize: 0,
     startIndex: 0,
     endIndex: 0,
-    totalHeight: 0
+    totalSize: 0
   })
+
+  const getElementSizes = useCallback((element: HTMLElement) => {
+    const {
+      scrollTop,
+      clientHeight,
+      clientWidth,
+      scrollLeft
+    } = element
+
+    if (horizontal) {
+      return {
+        scroll: scrollLeft,
+        containerSize: clientWidth
+      }
+    }
+
+    return {
+      scroll: scrollTop,
+      containerSize: clientHeight
+    }
+  }, [horizontal])
 
   const updateVisibleRange = useCallback((element: HTMLElement) => {
     const {
-      scrollTop,
-      clientHeight
-    } = element
+      scroll,
+      containerSize
+    } = getElementSizes(element)
 
     const computedOverScan = Math.max(DEFAULT_OVERSCAN, overScan)
 
-    const computedItemHeight = itemHeight + (gapY ?? 0)
+    const computedItemSize = itemSize
 
     const newStartIndex = Math.max(
       0,
       Math.floor(
-        scrollTop / computedItemHeight
+        scroll / computedItemSize
       ) - computedOverScan
     )
 
     const newEndIndex = Math.min(
       itemsCount,
       Math.floor(
-        (scrollTop + clientHeight) / computedItemHeight
+        (scroll + containerSize) / computedItemSize
       ) + computedOverScan
     )
 
-    const totalHeight = computedItemHeight * itemsCount
-    let rerenderOverScan = Math.floor((overScan * 2 + clientHeight / computedItemHeight) / 2) - 1
+    const totalSize = computedItemSize * itemsCount
+    let rerenderOverScan = Math.floor((
+      overScan * 2 + containerSize / computedItemSize
+    ) / 2) - 1
 
     rerenderOverScan = listConfig.current.endIndex + rerenderOverScan > itemsCount
       ? rerenderOverScan - (listConfig.current.endIndex + rerenderOverScan - itemsCount)
@@ -73,17 +101,17 @@ export const useVirtualizedList = ({
 
     if (
       isRerender
-      || listConfig.current.computedItemHeight !== computedItemHeight
-      || listConfig.current.totalHeight !== totalHeight
+      || listConfig.current.computedItemSize !== computedItemSize
+      || listConfig.current.totalSize !== totalSize
     ) {
-      listConfig.current.computedItemHeight = computedItemHeight
+      listConfig.current.computedItemSize = computedItemSize
       listConfig.current.startIndex = newStartIndex
       listConfig.current.endIndex = newEndIndex
-      listConfig.current.totalHeight = totalHeight
+      listConfig.current.totalSize = totalSize
 
       rerender()
     }
-  }, [gapY, itemHeight, itemsCount, overScan, rerender])
+  }, [getElementSizes, itemSize, itemsCount, overScan, rerender])
 
   const onScrollEventCallback = useCallback((event: Event) => {
     const target = event.currentTarget as HTMLElement
@@ -101,6 +129,7 @@ export const useVirtualizedList = ({
 
     element.addEventListener("scroll", onScrollEventCallback)
     element.addEventListener("resize", onScrollEventCallback)
+
     return () => {
       element.removeEventListener("scroll", onScrollEventCallback)
       element.removeEventListener("resize", onScrollEventCallback)
@@ -121,7 +150,7 @@ export const useVirtualizedList = ({
       for (let i = listConfig.current.startIndex; i < listConfig.current.endIndex; i++) {
         ret.push({
           index: i,
-          start: i * listConfig.current.computedItemHeight
+          start: i * listConfig.current.computedItemSize
         })
       }
       return ret

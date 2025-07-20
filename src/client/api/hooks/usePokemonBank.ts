@@ -1,10 +1,11 @@
 import useSWRInfinite from "swr/infinite"
-import { fetchFn } from "../fetcher"
+import { fetchFn } from "@shared/api/fetcher"
 import {
   ListResponseType,
   ListRequestType
 } from "@shared/api/schema/pokemon/list"
 import { useCallback } from "react"
+import { urlWithParams } from "@api/helpers/urlWithParams"
 
 export function usePokemonBank({ limit, tags }: ListRequestType) {
   const getKey = useCallback((
@@ -15,34 +16,26 @@ export function usePokemonBank({ limit, tags }: ListRequestType) {
       return null
     }
 
-    return {
-      url: "/api/pokemon/list",
+    return urlWithParams("/api/pokemon/list", {
       page: pageIndex,
-      limit
-    }
-  }, [limit])
+      limit,
+      tags
+    })
+  }, [limit, tags])
 
   return useSWRInfinite(
     getKey,
-    (
-      {
-        url,
-        page,
-        limit
-      }
-    ) => fetchFn<
+    url => fetchFn<
       ListResponseType,
       ListRequestType
     >(
       {
-        payload: {
-          page,
-          limit,
-          tags
-        },
         url: url,
-        method: "POST"
+        method: "GET"
       }
-    )
+    ),
+    {
+      revalidateFirstPage: false
+    }
   )
 }

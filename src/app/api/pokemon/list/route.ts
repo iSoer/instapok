@@ -5,8 +5,10 @@ import {
   listResponseSchema
 } from "@shared/api/schema/pokemon/list"
 
-export async function POST(request: NextRequest) {
-  const body = await request.json()
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url)
+  const body = Object.fromEntries(url.searchParams.entries())
+
   const result = listRequestSchema.safeParse(body)
 
   if (!result.success) {

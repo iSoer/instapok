@@ -1,6 +1,6 @@
 import { db, tagsSchema } from "@db"
 
-export async function POST() {
+export async function GET() {
   try {
     const tags = await db.select().from(tagsSchema)
     return Response.json({

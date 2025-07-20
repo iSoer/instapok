@@ -1,4 +1,4 @@
-import { fetchFn } from "../fetcher"
+import { fetchFn } from "@shared/api/fetcher"
 import useSWR from "swr"
 import { ListResponseType } from "@shared/api/schema/pokemon/tags"
 
@@ -8,7 +8,7 @@ export function usePokemonTags() {
     (url) => {
       return fetchFn<ListResponseType, void>({
         url,
-        method: "POST"
+        method: "GET"
       })
     }
   )

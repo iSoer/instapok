@@ -8,7 +8,7 @@ export type InstagramSliderProps = {
   initialLoading: boolean
   fullScreen?: boolean
   disableSnapMandatory?: boolean
-  slideGapY?: number
+  slideGap?: number
   containerPaddingY?: number
   onLastItemShowed?: () => void
   className?: ClassNameValue
@@ -17,12 +17,12 @@ export type InstagramSliderProps = {
 export const InstagramSlider = memo(function InstagramSlider({
   renderItem,
   initialLoading,
-  itemHeight,
+  itemSize,
   disableSnapMandatory,
   itemsCount,
   overScan,
   onLastItemShowed,
-  slideGapY,
+  slideGap,
   containerPaddingY,
   fullScreen,
   className
@@ -33,14 +33,13 @@ export const InstagramSlider = memo(function InstagramSlider({
 
   const {
     startIndex,
-    computedItemHeight,
-    totalHeight,
+    computedItemSize,
+    totalSize,
     endIndex,
     getVirtualItems
   } = useVirtualizedList({
     getScrollElement,
-    gapY: slideGapY,
-    itemHeight: itemHeight,
+    itemSize: itemSize + (slideGap ?? 0),
     overScan: overScan,
     itemsCount: itemsCount
   })
@@ -69,9 +68,11 @@ export const InstagramSlider = memo(function InstagramSlider({
         fullScreen && "h-dvh"
       )}
       style={{
-        ...(!fullScreen && { height: `${itemHeight + ((containerPaddingY ?? 0) * 2)}px` }),
-        scrollPaddingTop: `${containerPaddingY}px`,
-        paddingTop: `${containerPaddingY}px`
+        ...(!fullScreen && {
+          height: `${itemSize + ((containerPaddingY ?? 0) * 2)}px`
+        }),
+        scrollPaddingTop: `${containerPaddingY ?? 0}px`,
+        paddingTop: `${containerPaddingY ?? 0}px`
       }}
     >
       {
@@ -84,12 +85,12 @@ export const InstagramSlider = memo(function InstagramSlider({
           : (
               <div
                 style={{
-                  height: `${totalHeight}px`
+                  height: `${totalSize}px`
                 }}
               >
                 <div
                   style={{
-                    transform: `translateY(${computedItemHeight * startIndex}px)`
+                    transform: `translateY(${computedItemSize * startIndex}px)`
                   }}
                 >
                   {
@@ -103,12 +104,12 @@ export const InstagramSlider = memo(function InstagramSlider({
                               "h-fit"
                             )}
                           >
-                            {renderItem(index, itemHeight)}
+                            {renderItem(index, itemSize)}
                           </div>
                           {
-                            slideGapY && (
+                            slideGap && (
                               <div
-                                style={{ height: `${slideGapY}px` }}
+                                style={{ height: `${slideGap}px` }}
                               />
                             )
                           }

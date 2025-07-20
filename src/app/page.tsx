@@ -6,9 +6,10 @@ import { twMerge } from "@lib/tailwind-merge"
 import { Sidebar, type FormType, SidebarOnChangeValues } from "@components/layout/Sidebar"
 import { Layout } from "@components/layout/Layout"
 
-import { InstagramSlider } from "@components/instagram-slider/InstagramSlider"
-import { InstagramCardItemType, InstagramCardSlide } from "@components/instagram-slider/InstagramCardSlide"
+import { InstagramCardItemType, InstagramCardSlide } from "@components/InstagramCardSlide"
 import { Loader } from "@components/ui/Loader"
+import { InstagramInfiniteScrollSlider } from "@components/instagram-Infinite-scroll/InstagramInfiniteScrollSlider"
+import { InstagramSlider } from "@components/instagram-slider/InstagramSlider"
 
 export default function Home() {
   const [
@@ -35,7 +36,7 @@ export default function Home() {
     error
   } = usePokemonBank({ page: 0, limit: 20, tags: form.tags })
 
-  const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === "undefined")
+  const isLoadingMore = isLoading || Boolean(size > 0 && data && typeof data[size - 1] === "undefined")
 
   const itemList = useMemo(() => {
     if (!data) {
@@ -127,19 +128,32 @@ export default function Home() {
           isLoadingMore
           && <Loader className={twMerge("absolute top-0 left-0")} />
         }
-        <InstagramSlider
-          itemsCount={itemList.length}
-          renderItem={renderItem}
-          initialLoading={isLoading}
-          onLastItemShowed={onLastItemShowed}
+        <div className={twMerge("absolute top-40 left-10")}>
+          Items:
+          {" "}
+          {itemList.length}
+        </div>
+        <div className="grid grid-cols-2">
+          <InstagramInfiniteScrollSlider
+            loading={isLoading || isLoadingMore}
+            items={itemList}
+            onLastItemShowed={onLastItemShowed}
+          />
+          <InstagramSlider
+            itemsCount={itemList.length}
+            renderItem={renderItem}
+            initialLoading={isLoading}
+            onLastItemShowed={onLastItemShowed}
 
-          fullScreen={form.fullScreen}
-          itemHeight={form.sliderHeight}
-          overScan={form.overScan}
-          slideGapY={form.slideGapY}
-          containerPaddingY={form.containerPaddingY}
-          disableSnapMandatory={form.disableSnapMandatory}
-        />
+            fullScreen={form.fullScreen}
+            itemSize={form.sliderHeight}
+            overScan={form.overScan}
+            slideGap={form.slideGapY}
+            containerPaddingY={form.containerPaddingY}
+            disableSnapMandatory={form.disableSnapMandatory}
+          />
+        </div>
+
       </section>
     </Layout>
   )
