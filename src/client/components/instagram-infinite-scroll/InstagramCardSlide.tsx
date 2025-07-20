@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { twMerge } from "@lib/tailwind-merge"
-import { Img } from "./ui/Img"
+import { Img } from "../ui/Img"
 
 export type InstagramCardItemType = {
   url: string

@@ -1,45 +1,40 @@
 "use client"
 import { usePokemonBank } from "@api/hooks/usePokemonBank"
 import { useCallback, useMemo, useRef, useState } from "react"
-import { twMerge } from "@lib/tailwind-merge"
 
 import { Sidebar, type FormType, SidebarOnChangeValues } from "@components/layout/Sidebar"
 import { Layout } from "@components/layout/Layout"
 
-import { InstagramCardItemType, InstagramCardSlide } from "@components/InstagramCardSlide"
-import { Loader } from "@components/ui/Loader"
-import { InstagramInfiniteScrollSlider } from "@components/instagram-Infinite-scroll/InstagramInfiniteScrollSlider"
-import { InstagramSlider } from "@components/instagram-slider/InstagramSlider"
+import { InstagramCardItemType } from "@components/instagram-infinite-scroll/InstagramCardSlide"
+import {
+  InstagramInfiniteScrollSlider,
+  InstagramInfiniteScrollSliderForwardRefType
+} from "@components/instagram-infinite-scroll/InstagramInfiniteScrollSlider"
 
 export default function Home() {
+  const sliderRef = useRef<HTMLDivElement & InstagramInfiniteScrollSliderForwardRefType>(null)
+
   const [
     form,
     setForm
   ] = useState<FormType>({
-    tags: [],
-    sliderHeight: 500,
-    sliderWidth: 350,
-    slideGapY: 20,
-    containerPaddingY: 40,
-    overScan: 10,
-    disableSnapMandatory: false,
-    fullScreen: false
+    tags: []
   })
-
-  const { current: initialSidebarValues } = useRef(form)
 
   const {
     data,
     setSize,
     isLoading,
-    size,
+    isLoadingMore,
     error
-  } = usePokemonBank({ page: 0, limit: 20, tags: form.tags })
-
-  const isLoadingMore = isLoading || Boolean(size > 0 && data && typeof data[size - 1] === "undefined")
+  } = usePokemonBank({
+    page: 0,
+    limit: 20,
+    tags: form.tags
+  })
 
   const itemList = useMemo(() => {
-    if (!data) {
+    if (!data || isLoading) {
       return []
     }
 
@@ -63,48 +58,18 @@ export default function Home() {
     }
   }, [error, isLoading, setSize])
 
-  const renderItem = useCallback((index: number, itemHeight: number) => {
-    const pokemon = itemList?.[index]
-
-    if (!pokemon) {
-      return <div>Pokemon not found :c</div>
-    }
-
-    return (
-      <InstagramCardSlide
-        itemWidth={form.sliderWidth}
-        itemHeight={itemHeight}
-        item={pokemon}
-        index={index}
-      />
-    )
-  }, [form.sliderWidth, itemList])
-
   const onSidebarDataChange = useCallback(({
-    tags,
-    sliderHeight,
-    sliderWidth,
-    slideGapY,
-    containerPaddingY,
-    disableSnapMandatory,
-    overScan,
-    fullScreen
+    tags
   }: SidebarOnChangeValues) => {
     setForm(prev => ({
       ...prev,
-      ...(tags && { tags }),
-      ...(sliderHeight && { sliderHeight }),
-      ...(sliderWidth && { sliderWidth }),
-      ...(slideGapY && { slideGapY }),
-      ...(containerPaddingY && { containerPaddingY }),
-      ...(overScan && { overScan }),
-
-      ...(typeof disableSnapMandatory !== "undefined" && { disableSnapMandatory }),
-      ...(typeof fullScreen !== "undefined" && { fullScreen })
+      ...(tags && { tags })
     }))
     if (tags) {
-      setSize(0)
+      setSize(1)
     }
+
+    sliderRef.current?.scrollToTop()
   }, [setSize])
 
   if (error) {
@@ -120,40 +85,15 @@ export default function Home() {
   return (
     <Layout withSidebar>
       <Sidebar
-        initialValues={initialSidebarValues}
         onChange={onSidebarDataChange}
       />
-      <section className="flex items-center justify-center relative">
-        {
-          isLoadingMore
-          && <Loader className={twMerge("absolute top-0 left-0")} />
-        }
-        <div className={twMerge("absolute top-40 left-10")}>
-          Items:
-          {" "}
-          {itemList.length}
-        </div>
-        <div className="grid grid-cols-2">
-          <InstagramInfiniteScrollSlider
-            loading={isLoading || isLoadingMore}
-            items={itemList}
-            onLastItemShowed={onLastItemShowed}
-          />
-          <InstagramSlider
-            itemsCount={itemList.length}
-            renderItem={renderItem}
-            initialLoading={isLoading}
-            onLastItemShowed={onLastItemShowed}
-
-            fullScreen={form.fullScreen}
-            itemSize={form.sliderHeight}
-            overScan={form.overScan}
-            slideGap={form.slideGapY}
-            containerPaddingY={form.containerPaddingY}
-            disableSnapMandatory={form.disableSnapMandatory}
-          />
-        </div>
-
+      <section>
+        <InstagramInfiniteScrollSlider
+          ref={sliderRef}
+          loading={isLoading || isLoadingMore}
+          items={itemList}
+          onLastItemShowed={onLastItemShowed}
+        />
       </section>
     </Layout>
   )

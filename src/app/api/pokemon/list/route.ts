@@ -7,9 +7,12 @@ import {
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
-  const body = Object.fromEntries(url.searchParams.entries())
 
-  const result = listRequestSchema.safeParse(body)
+  const result = listRequestSchema.safeParse({
+    page: url.searchParams.get("page"),
+    limit: url.searchParams.get("limit"),
+    tags: url.searchParams.getAll("tags")
+  })
 
   if (!result.success) {
     return Response.json(

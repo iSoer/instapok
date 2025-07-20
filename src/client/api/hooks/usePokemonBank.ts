@@ -12,7 +12,10 @@ export function usePokemonBank({ limit, tags }: ListRequestType) {
     pageIndex: number,
     previousPageData: ListResponseType
   ) => {
-    if (previousPageData && previousPageData.data.length < limit) {
+    if (
+      previousPageData
+      && previousPageData.data.length < limit
+    ) {
       return null
     }
 
@@ -23,7 +26,7 @@ export function usePokemonBank({ limit, tags }: ListRequestType) {
     })
   }, [limit, tags])
 
-  return useSWRInfinite(
+  const swrData = useSWRInfinite(
     getKey,
     url => fetchFn<
       ListResponseType,
@@ -35,7 +38,19 @@ export function usePokemonBank({ limit, tags }: ListRequestType) {
       }
     ),
     {
-      revalidateFirstPage: false
+      keepPreviousData: true,
+      revalidateFirstPage: false,
+      initialSize: 1
     }
   )
+
+  return {
+    isLoadingMore: swrData.isLoading
+      || Boolean(
+        swrData.size > 0
+        && swrData.data
+        && typeof swrData.data[swrData.size - 1] === "undefined"
+      ),
+    ...swrData
+  }
 }

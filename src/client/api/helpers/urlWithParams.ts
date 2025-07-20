@@ -5,9 +5,10 @@ export const urlWithParams = (
   params: SearchParamsType
 ) => {
   const url = new URL(baseUrl, typeof window !== "undefined" ? window.location.origin : "http://localhost")
+
   Object.entries(params).forEach(([key, value]) => {
     if (Array.isArray(value)) {
-      value.forEach(v => url.searchParams.append(key, String(v)))
+      value.toSorted().forEach(v => url.searchParams.append(key, String(v)))
     }
     else {
       url.searchParams.set(key, String(value))
