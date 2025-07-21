@@ -15,6 +15,7 @@ export type InstagramInfiniteScrollSliderForwardRefType = {
 
 export type InstagramInfiniteScrollSliderPropsType = {
   loading: boolean
+  isReachingEnd: boolean
   items: InstagramCardItemType[]
   onLastItemShowed: () => void
 }
@@ -27,29 +28,13 @@ export const InstagramInfiniteScrollSlider = memo(
     {
       loading,
       items,
-      onLastItemShowed
+      onLastItemShowed,
+      isReachingEnd
     },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
     const observer = useRef<IntersectionObserver | null>(null)
-
-    const lastSlideRef = useCallback(
-      (node: HTMLDivElement) => {
-        if (loading) return
-
-        if (observer.current) observer.current.disconnect()
-
-        observer.current = new IntersectionObserver((entries) => {
-          if (entries[0].isIntersecting) {
-            onLastItemShowed()
-          }
-        })
-
-        if (node) observer.current.observe(node)
-      },
-      [loading, onLastItemShowed]
-    )
 
     useImperativeHandle(ref, () => ({
       scrollToTop: () => {
@@ -57,10 +42,31 @@ export const InstagramInfiniteScrollSlider = memo(
       }
     }))
 
+    const lastSlideRef = useCallback(
+      (node: HTMLDivElement) => {
+        if (loading) {
+          return
+        }
+
+        if (observer.current) {
+          observer.current.disconnect()
+        }
+
+        observer.current = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            onLastItemShowed()
+          }
+        })
+
+        if (node) {
+          observer.current.observe(node)
+        }
+      },
+      [loading, onLastItemShowed]
+    )
+
     return (
       <div className="relative">
-        {loading && <Loader className="absolute top-40 left-20" />}
-
         <div className="absolute left-20 top-20">
           Items:
           {" "}
@@ -84,7 +90,12 @@ export const InstagramInfiniteScrollSlider = memo(
           {items.map((item, index) => (
             <div
               key={item.url}
-              ref={index === items.length - 1 ? lastSlideRef : undefined}
+              ref={
+                index === items.length - 1
+                && !isReachingEnd
+                  ? lastSlideRef
+                  : undefined
+              }
               className={twMerge("snap-start", "snap-always", "h-fit")}
             >
               <InstagramCardSlide
@@ -94,6 +105,18 @@ export const InstagramInfiniteScrollSlider = memo(
               />
             </div>
           ))}
+          {loading && (
+            <div className="mx-auto">
+              <Loader />
+            </div>
+          )}
+          {isReachingEnd && (
+            <div
+              className={twMerge("snap-start", "snap-always", "text-center", "p-20")}
+            >
+              Data has ended
+            </div>
+          )}
         </div>
       </div>
     )

@@ -14,7 +14,7 @@ export function usePokemonBank({ limit, tags }: ListRequestType) {
   ) => {
     if (
       previousPageData
-      && previousPageData.data.length < limit
+      && previousPageData.length < limit
     ) {
       return null
     }
@@ -43,13 +43,14 @@ export function usePokemonBank({ limit, tags }: ListRequestType) {
       initialSize: 1
     }
   )
-
+  const { data, isLoading, size } = swrData
   return {
-    isLoadingMore: swrData.isLoading
+    isReachingEnd: Boolean(data?.[data.length - 1] && data?.[data.length - 1].length < limit),
+    isLoadingMore: isLoading
       || Boolean(
-        swrData.size > 0
-        && swrData.data
-        && typeof swrData.data[swrData.size - 1] === "undefined"
+        size > 0
+        && data
+        && typeof data[size - 1] === "undefined"
       ),
     ...swrData
   }

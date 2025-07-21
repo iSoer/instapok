@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { infiniteResponse, infiniteRequest } from "../pagination"
+import { infiniteRequest } from "../pagination"
 import { tagResponseItem } from "./tags"
 
 export const listItem = z.object({
@@ -11,10 +11,7 @@ export const listItem = z.object({
   tags: z.array(tagResponseItem).nullish()
 })
 
-export const listResponseSchema = z.object({
-  data: z.array(listItem),
-  pagination: infiniteResponse
-})
+export const listResponseSchema = z.array(listItem)
 
 export const listRequestSchema = z.object({
   tags: z.array(z.string()).nullish()

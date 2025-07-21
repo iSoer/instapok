@@ -58,12 +58,7 @@ export async function GET(request: NextRequest) {
     // And I so don't want to use native sql dialect and for this request I did pagination on JS
     const paginated = formatted.slice(page * limit, (page + 1) * limit)
 
-    const parsedResponse = listResponseSchema.safeParse({
-      data: paginated,
-      pagination: {
-        count: paginated.length
-      }
-    })
+    const parsedResponse = listResponseSchema.safeParse(paginated)
 
     if (!parsedResponse.success) {
       return Response.json({

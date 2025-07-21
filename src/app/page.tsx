@@ -26,6 +26,7 @@ export default function Home() {
     setSize,
     isLoading,
     isLoadingMore,
+    isReachingEnd,
     error
   } = usePokemonBank({
     page: 0,
@@ -41,7 +42,7 @@ export default function Home() {
     return data.reduce<InstagramCardItemType[]>((acc, datum) => {
       return [
         ...acc,
-        ...datum.data.map((item) => {
+        ...datum.map((item) => {
           return {
             ...item,
             url: `/uploads/pokemon/images/${item.name}.webp`,
@@ -50,7 +51,7 @@ export default function Home() {
         })
       ]
     }, [])
-  }, [data])
+  }, [data, isLoading])
 
   const onLastItemShowed = useCallback(() => {
     if (!isLoading && !error) {
@@ -65,11 +66,13 @@ export default function Home() {
       ...prev,
       ...(tags && { tags })
     }))
+
     if (tags) {
       setSize(1)
+        .then(() => {
+          sliderRef.current?.scrollToTop()
+        })
     }
-
-    sliderRef.current?.scrollToTop()
   }, [setSize])
 
   if (error) {
@@ -91,6 +94,7 @@ export default function Home() {
         <InstagramInfiniteScrollSlider
           ref={sliderRef}
           loading={isLoading || isLoadingMore}
+          isReachingEnd={isReachingEnd}
           items={itemList}
           onLastItemShowed={onLastItemShowed}
         />
