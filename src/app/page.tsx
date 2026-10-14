@@ -134,11 +134,6 @@ export default function Home() {
           {itemList.length}
         </div>
         <div className="grid grid-cols-2">
-          <InstagramInfiniteScrollSlider
-            loading={isLoading || isLoadingMore}
-            items={itemList}
-            onLastItemShowed={onLastItemShowed}
-          />
           <InstagramSlider
             itemsCount={itemList.length}
             renderItem={renderItem}
@@ -153,7 +148,6 @@ export default function Home() {
             disableSnapMandatory={form.disableSnapMandatory}
           />
         </div>
-
       </section>
     </Layout>
   )

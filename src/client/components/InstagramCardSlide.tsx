@@ -47,27 +47,6 @@ export const InstagramCardSlide = memo(function InstagramImageSlide<T extends In
           width: `${itemWidth}px`
         }}
       >
-        {
-          index && (
-            <div
-              className={twMerge(
-                "absolute top-0 left-0 z-30",
-                "rounded-br",
-                "bg-green-900",
-                "px-5",
-                "material-shadow",
-                "uppercase",
-                "text-sm",
-                "font-light",
-                "text-neutral-200"
-              )}
-            >
-              Index:
-              {" "}
-              {index}
-            </div>
-          )
-        }
         <div
           className={twMerge(
             "absolute top-0 right-0 z-30",
