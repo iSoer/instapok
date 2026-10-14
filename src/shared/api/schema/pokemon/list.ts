@@ -17,7 +17,7 @@ export const listResponseSchema = z.object({
 })
 
 export const listRequestSchema = z.object({
-  tags: z.array(z.string()).nullish()
+  tags: z.string().nullish()
 }).merge(infiniteRequest)
 
 export type ListResponseType = z.infer<typeof listResponseSchema>
