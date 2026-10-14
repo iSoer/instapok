@@ -6,7 +6,7 @@ import { Toggle } from "@components/ui/Toggle"
 import { usePokemonTags } from "@api/hooks/usePokemonTags"
 
 export type FormType = {
-  tags: string[]
+  tags: string
   sliderHeight: number
   sliderWidth: number
   slideGapY: number
@@ -43,8 +43,9 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
           label="Select poketag:"
           options={data?.data}
           onChange={(event) => {
+            console.log(event.target.value)
             onChange({
-              tags: event.target.value ? [event.target.value] : []
+              tags: event.target.value ? event.target.value : ""
             })
           }}
         />

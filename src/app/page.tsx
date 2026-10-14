@@ -16,7 +16,7 @@ export default function Home() {
     form,
     setForm
   ] = useState<FormType>({
-    tags: [],
+    tags: "",
     sliderHeight: 500,
     sliderWidth: 350,
     slideGapY: 20,
@@ -102,9 +102,8 @@ export default function Home() {
       ...(typeof disableSnapMandatory !== "undefined" && { disableSnapMandatory }),
       ...(typeof fullScreen !== "undefined" && { fullScreen })
     }))
-    if (tags) {
-      setSize(0)
-    }
+
+    setSize(0)
   }, [setSize])
 
   if (error) {
