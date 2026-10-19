@@ -1,12 +1,13 @@
 import { memo } from "react"
 import { twMerge } from "@lib/tailwind-merge"
-import { Select } from "@components/ui/Select"
+import { CheckboxGroup } from "@components/ui/CheckboxGroup"
 import { Input } from "@components/ui/Input"
 import { Toggle } from "@components/ui/Toggle"
 import { usePokemonTags } from "@api/hooks/usePokemonTags"
 
 export type FormType = {
-  tags: string
+  // Selected tag ids, sorted
+  tags: string[]
   sliderHeight: number
   sliderWidth: number
   slideGapY: number
@@ -38,14 +39,14 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
           "flex flex-col gap-12"
         )}
       >
-        <Select
+        <CheckboxGroup
           isLoading={isLoading}
-          label="Select poketag:"
+          label="Select poketags:"
           options={data?.data}
-          onChange={(event) => {
-            console.log(event.target.value)
+          defaultValue={initialValues.tags}
+          onChange={(tags) => {
             onChange({
-              tags: event.target.value ? event.target.value : ""
+              tags
             })
           }}
         />

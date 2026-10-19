@@ -15,7 +15,7 @@ export default function Home() {
     form,
     setForm
   ] = useState<FormType>({
-    tags: "",
+    tags: [],
     sliderHeight: 500,
     sliderWidth: 350,
     slideGapY: 20,
@@ -28,16 +28,13 @@ export default function Home() {
   // Sidebar inputs are uncontrolled: they only need the initial form
   const [initialSidebarValues] = useState(form)
 
-  // Stable reference: the SWR key builder depends on it
-  const selectedTags = useMemo(() => (form.tags ? [form.tags] : []), [form.tags])
-
   const {
     data,
     setSize,
     isLoading,
     size,
     error
-  } = usePokemonBank({ page: 0, limit: 20, tags: selectedTags })
+  } = usePokemonBank({ page: 0, limit: 20, tags: form.tags })
 
   const isLoadingMore = isLoading || Boolean(size > 0 && data && typeof data[size - 1] === "undefined")
 
@@ -94,7 +91,7 @@ export default function Home() {
   }: SidebarOnChangeValues) => {
     setForm(prev => ({
       ...prev,
-      // "" is a valid value here: it clears the tag filter
+      // [] is a valid value here: it clears the tag filter
       ...(typeof tags !== "undefined" && { tags }),
       ...(sliderHeight && { sliderHeight }),
       ...(sliderWidth && { sliderWidth }),
