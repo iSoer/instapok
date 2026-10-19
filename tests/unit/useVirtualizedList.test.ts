@@ -27,7 +27,7 @@ const setup = (itemsCount = 100, overScan = 2) => {
   let renders = 0
 
   const hook = renderHook(
-    props => {
+    (props) => {
       renders++
 
       return useVirtualizedList(props)

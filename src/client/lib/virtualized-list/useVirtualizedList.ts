@@ -2,8 +2,8 @@
 import {
   useCallback,
   useEffect,
-  useReducer,
-  useRef
+  useRef,
+  useState
 } from "react"
 
 export type UseVirtualizedListPropsType = {
@@ -17,6 +17,20 @@ export type UseVirtualizedListPropsType = {
 
 const DEFAULT_OVERSCAN = 2 as const
 
+type ListConfigType = {
+  computedItemSize: number
+  startIndex: number
+  endIndex: number
+  totalSize: number
+}
+
+const INITIAL_LIST_CONFIG: ListConfigType = {
+  computedItemSize: 0,
+  startIndex: 0,
+  endIndex: 0,
+  totalSize: 0
+}
+
 export const useVirtualizedList = ({
   itemsCount,
   getScrollElement,
@@ -24,19 +38,10 @@ export const useVirtualizedList = ({
   overScan = DEFAULT_OVERSCAN,
   itemSize
 }: UseVirtualizedListPropsType) => {
-  const rerender = useReducer(() => ({}), {})[1]
-
-  const listConfig = useRef<{
-    computedItemSize: number
-    startIndex: number
-    endIndex: number
-    totalSize: number
-  }>({
-    computedItemSize: 0,
-    startIndex: 0,
-    endIndex: 0,
-    totalSize: 0
-  })
+  // The ref is the working copy read by scroll handlers; the state is a snapshot for render.
+  // The snapshot is only replaced when the range crosses the threshold, so scrolling doesn't rerender.
+  const listConfig = useRef<ListConfigType>(INITIAL_LIST_CONFIG)
+  const [renderedConfig, setRenderedConfig] = useState<ListConfigType>(INITIAL_LIST_CONFIG)
 
   const getElementSizes = useCallback((element: HTMLElement) => {
     const {
@@ -104,14 +109,16 @@ export const useVirtualizedList = ({
       || listConfig.current.computedItemSize !== computedItemSize
       || listConfig.current.totalSize !== totalSize
     ) {
-      listConfig.current.computedItemSize = computedItemSize
-      listConfig.current.startIndex = newStartIndex
-      listConfig.current.endIndex = newEndIndex
-      listConfig.current.totalSize = totalSize
+      listConfig.current = {
+        computedItemSize,
+        startIndex: newStartIndex,
+        endIndex: newEndIndex,
+        totalSize
+      }
 
-      rerender()
+      setRenderedConfig(listConfig.current)
     }
-  }, [getElementSizes, itemSize, itemsCount, overScan, rerender])
+  }, [getElementSizes, itemSize, itemsCount, overScan])
 
   const onScrollEventCallback = useCallback((event: Event) => {
     const target = event.currentTarget as HTMLElement
@@ -141,16 +148,16 @@ export const useVirtualizedList = ({
   ])
 
   return {
-    ...listConfig.current,
+    ...renderedConfig,
     getVirtualItems: () => {
       const ret: {
         index: number
         start: number
       }[] = []
-      for (let i = listConfig.current.startIndex; i < listConfig.current.endIndex; i++) {
+      for (let i = renderedConfig.startIndex; i < renderedConfig.endIndex; i++) {
         ret.push({
           index: i,
-          start: i * listConfig.current.computedItemSize
+          start: i * renderedConfig.computedItemSize
         })
       }
       return ret

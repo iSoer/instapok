@@ -1,6 +1,6 @@
 "use client"
 import { usePokemonBank } from "@api/hooks/usePokemonBank"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { twMerge } from "@lib/tailwind-merge"
 
 import { Sidebar, type FormType, SidebarOnChangeValues } from "@components/layout/Sidebar"
@@ -25,7 +25,8 @@ export default function Home() {
     fullScreen: false
   })
 
-  const { current: initialSidebarValues } = useRef(form)
+  // Sidebar inputs are uncontrolled: they only need the initial form
+  const [initialSidebarValues] = useState(form)
 
   // Stable reference: the SWR key builder depends on it
   const selectedTags = useMemo(() => (form.tags ? [form.tags] : []), [form.tags])
