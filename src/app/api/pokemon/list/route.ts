@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { z } from "zod"
 import { listPokemons } from "@/server/db/queries/listPokemons"
 import {
   listRequestSchema,
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     return Response.json(
       {
         error: "Invalid query parameters",
-        details: result.error.flatten()
+        details: z.flattenError(result.error)
       },
       {
         status: 400
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     if (!parsedResponse.success) {
       return Response.json({
         error: "Internal Server Error: Invalid response format",
-        details: parsedResponse.error.flatten()
+        details: z.flattenError(parsedResponse.error)
       }, {
         status: 500
       })

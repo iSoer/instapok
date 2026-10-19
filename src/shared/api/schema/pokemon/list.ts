@@ -28,12 +28,12 @@ const tagsParam = z.preprocess(
   z
     .array(z.string())
     .transform(tags => [...new Set(tags.filter(tag => tag !== ""))])
-    .pipe(z.array(z.string().uuid()).max(MAX_TAGS))
+    .pipe(z.array(z.uuid()).max(MAX_TAGS))
 )
 
 export const listRequestSchema = z.object({
   tags: tagsParam
-}).merge(infiniteRequest)
+}).extend(infiniteRequest.shape)
 
 export type ListResponseType = z.infer<typeof listResponseSchema>
 
