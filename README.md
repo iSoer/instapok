@@ -22,6 +22,13 @@ Next, to start the local server:
 npm run dev
 ```
 
+To run tests (integration tests need the docker Postgres running; they use a separate `instapoke_test` database):
+```bash
+npm test                  # all
+npm run test:unit         # no database required
+npm run test:integration
+```
+
 # Assignment: Instapoke
 Create a React component for displaying an image feed (like in Instagram). Loading new feed items should occur on scroll.
 

@@ -8,7 +8,6 @@ import { Layout } from "@components/layout/Layout"
 
 import { InstagramCardItemType, InstagramCardSlide } from "@components/InstagramCardSlide"
 import { Loader } from "@components/ui/Loader"
-import { InstagramInfiniteScrollSlider } from "@components/instagram-Infinite-scroll/InstagramInfiniteScrollSlider"
 import { InstagramSlider } from "@components/instagram-slider/InstagramSlider"
 
 export default function Home() {
@@ -75,7 +74,6 @@ export default function Home() {
         itemWidth={form.sliderWidth}
         itemHeight={itemHeight}
         item={pokemon}
-        index={index}
       />
     )
   }, [form.sliderWidth, itemList])

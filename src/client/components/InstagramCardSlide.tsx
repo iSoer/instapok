@@ -18,14 +18,12 @@ export type InstagramCardSlidePropsType<T> = {
   itemHeight: number
   itemWidth: number
   item: T
-  index?: number
 }
 
 export const InstagramCardSlide = memo(function InstagramImageSlide<T extends InstagramCardItemType>({
   itemHeight,
   itemWidth,
-  item,
-  index
+  item
 }: InstagramCardSlidePropsType<T>) {
   return (
     <div
