@@ -27,7 +27,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     // Local postgres data volume
-    "docker/**"
+    "docker/**",
+    // Service worker bundle, built from src/sw/sw.ts
+    "public/sw.js"
   ])
 ])
 

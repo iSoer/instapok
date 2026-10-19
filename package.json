@@ -4,15 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run sw:build",
     "build": "next build",
     "start": "next start",
+    "sw:build": "npm run typecheck:sw && tsx src/server/scripts/buildServiceWorker",
+    "typecheck:sw": "tsc -p tsconfig.sw.json",
     "lint": "eslint .",
     "lint+fix": "eslint . --fix",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
-    "init": "tsx src/server/scripts/init"
+    "init": "tsx src/server/scripts/init",
+    "icons": "tsx src/server/scripts/generatePwaIcons"
   },
   "dependencies": {
     "dotenv": "^18.0.8",
@@ -36,6 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.2",
+    "esbuild": "~0.28.2",
     "eslint": "^9",
     "eslint-config-next": "^16.4.2",
     "jsdom": "^29.1.1",
