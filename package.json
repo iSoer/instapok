@@ -4,10 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npm run sw:build",
+    "prebuild": "npm run typecheck:sw",
     "build": "next build",
     "start": "next start",
-    "sw:build": "npm run typecheck:sw && tsx src/server/scripts/buildServiceWorker",
     "typecheck:sw": "tsc -p tsconfig.sw.json",
     "lint": "eslint .",
     "lint+fix": "eslint . --fix",
@@ -31,6 +30,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@serwist/turbopack": "^9.5.13",
     "@stylistic/eslint-plugin": "^5.1.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
@@ -44,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.4.2",
     "jsdom": "^29.1.1",
+    "serwist": "^9.5.13",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "typescript": "~6.0.3",

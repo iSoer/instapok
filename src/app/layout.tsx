@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
-import { ServiceWorkerRegister } from "@components/pwa/ServiceWorkerRegister"
+import { SerwistProvider } from "@serwist/turbopack/react"
+import { ServiceWorkerDevCleanup } from "@components/pwa/ServiceWorkerDevCleanup"
 import { InstallPrompt } from "@components/pwa/InstallPrompt"
 import "./style/style.css"
 
@@ -37,6 +38,9 @@ export const viewport: Viewport = {
   viewportFit: "cover"
 }
 
+// The worker is served from /serwist/sw.js but controls the whole app (the route sends Service-Worker-Allowed: /)
+const swOptions: RegistrationOptions = { scope: "/", updateViaCache: "none" }
+
 export default function RootLayout({
   children
 }: Readonly<{
@@ -47,9 +51,18 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
-        <InstallPrompt />
-        <ServiceWorkerRegister />
+        {/* reloadOnOnline would reset the feed; cacheOnNavigation is pointless for a single page */}
+        <SerwistProvider
+          swUrl="/serwist/sw.js"
+          disable={process.env.NODE_ENV !== "production"}
+          options={swOptions}
+          reloadOnOnline={false}
+          cacheOnNavigation={false}
+        >
+          {children}
+          <InstallPrompt />
+        </SerwistProvider>
+        <ServiceWorkerDevCleanup />
       </body>
     </html>
   )

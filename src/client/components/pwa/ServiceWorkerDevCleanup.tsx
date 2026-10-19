@@ -13,21 +13,14 @@ async function removeServiceWorker() {
   await Promise.all(keys.map(key => caches.delete(key)))
 }
 
-// Production only: in dev the cache-first rules would serve stale Turbopack chunks
-export function ServiceWorkerRegister() {
+// Dev only. Registration in production is done by SerwistProvider, whose `disable` does not remove an installed worker
+export function ServiceWorkerDevCleanup() {
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) {
+    if (process.env.NODE_ENV === "production" || !("serviceWorker" in navigator)) {
       return
     }
 
-    if (process.env.NODE_ENV !== "production") {
-      removeServiceWorker().catch(error => console.error("Service worker removal failed", error))
-      return
-    }
-
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/", updateViaCache: "none" })
-      .catch(error => console.error("Service worker registration failed", error))
+    removeServiceWorker().catch(error => console.error("Service worker removal failed", error))
   }, [])
 
   return null

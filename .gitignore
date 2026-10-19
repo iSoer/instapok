@@ -46,6 +46,3 @@ next-env.d.ts
 
 # docker files
 /docker
-
-# service worker bundle (npm run sw:build, built from src/sw/sw.ts)
-/public/sw.js
