@@ -1,6 +1,6 @@
 import path from "path"
 import fs from "fs"
-import execa from "execa"
+import { execFileSync } from "node:child_process"
 import { db, tagsSchema, pokemonsSchema, pokemonsTagsSchema } from "@db"
 import sharp from "sharp"
 import { sql, getTableName } from "drizzle-orm"
@@ -37,7 +37,7 @@ async function preparePokemonTableData(imgPath: string, shinyTag: string): Promi
 
 (async () => {
   try {
-    await execa("npx", ["drizzle-kit", "push"], {
+    execFileSync("npx", ["drizzle-kit", "push"], {
       stdio: "inherit"
     })
   }
