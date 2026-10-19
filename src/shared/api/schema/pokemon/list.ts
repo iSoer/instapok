@@ -16,8 +16,23 @@ export const listResponseSchema = z.object({
   pagination: infiniteResponse
 })
 
+export const MAX_TAGS = 50
+
+/**
+ * Tag ids from the query string (`?tags=<uuid>&tags=<uuid>`).
+ * Empty values mean "no tag filter" (the client sends `tags=` when nothing is selected),
+ * duplicates are dropped, anything else that is not a UUID is rejected.
+ */
+const tagsParam = z.preprocess(
+  value => (value === undefined || value === null ? [] : Array.isArray(value) ? value : [value]),
+  z
+    .array(z.string())
+    .transform(tags => [...new Set(tags.filter(tag => tag !== ""))])
+    .pipe(z.array(z.string().uuid()).max(MAX_TAGS))
+)
+
 export const listRequestSchema = z.object({
-  tags: z.string().nullish()
+  tags: tagsParam
 }).merge(infiniteRequest)
 
 export type ListResponseType = z.infer<typeof listResponseSchema>

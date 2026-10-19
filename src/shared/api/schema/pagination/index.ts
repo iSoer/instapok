@@ -24,7 +24,10 @@ export const paginationResponse = z.object({
 })
 
 export const infiniteResponse = z.object({
-  count: z.number()
+  // Items in the returned page
+  count: z.number(),
+  // Items matching the request filters across all pages
+  total: z.number().int().min(0)
 })
 
 export const paginationRequest = z.object({

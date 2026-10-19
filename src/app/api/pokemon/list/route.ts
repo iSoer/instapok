@@ -1,15 +1,19 @@
-import { db } from "@db"
 import { NextRequest } from "next/server"
+import { listPokemons } from "@/server/db/queries/listPokemons"
 import {
   listRequestSchema,
   listResponseSchema
 } from "@shared/api/schema/pokemon/list"
 
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url)
-  const body = Object.fromEntries(url.searchParams.entries())
+  const { searchParams } = new URL(request.url)
 
-  const result = listRequestSchema.safeParse(body)
+  const result = listRequestSchema.safeParse({
+    page: searchParams.get("page") ?? undefined,
+    limit: searchParams.get("limit") ?? undefined,
+    // Repeated keys: ?tags=<uuid>&tags=<uuid>
+    tags: searchParams.getAll("tags")
+  })
 
   if (!result.success) {
     return Response.json(
@@ -23,42 +27,14 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const {
-    page,
-    limit,
-    tags
-  } = result.data
-
   try {
-    const data = await db.query.pokemonsSchema.findMany({
-      with: {
-        tags: {
-          with: {
-            tag: true
-          }
-        }
-      }
-    })
-
-    let formatted = data.map(pokemon => ({
-      ...pokemon,
-      tags: pokemon.tags.map(tag => tag.tag)
-    }))
-
-    if (tags && tags.length > 0) {
-      formatted = formatted.filter((pokemon) => {
-        return pokemon.tags.some(tag => tags.includes(tag.id))
-      })
-    }
-
-    // I know how it looks like, but drizzle doesn't support many to many filtering right now :С
-    // And I so don't want to use native sql dialect and for this request I did pagination on JS
-    const paginated = formatted.slice(page * limit, (page + 1) * limit)
+    const { data, total } = await listPokemons(result.data)
 
     const parsedResponse = listResponseSchema.safeParse({
-      data: paginated,
+      data,
       pagination: {
-        count: paginated.length
+        count: data.length,
+        total
       }
     })
 
@@ -78,7 +54,9 @@ export async function GET(request: NextRequest) {
       }
     )
   }
-  catch {
+  catch (error) {
+    console.error("Failed to list pokemons", error)
+
     return Response.json(
       {
         error: "Error when collecting pokemons"

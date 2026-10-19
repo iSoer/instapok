@@ -24,7 +24,7 @@ describe("listResponseSchema", () => {
   it("accepts a valid payload", () => {
     const result = listResponseSchema.safeParse({
       data: [{ id: "1", name: "1", width: 96, height: 96, alt: "1", tags: [{ id: "t", name: "shiny" }] }],
-      pagination: { count: 1 }
+      pagination: { count: 1, total: 1 }
     })
 
     expect(result.success).toBe(true)
@@ -33,8 +33,14 @@ describe("listResponseSchema", () => {
   it("rejects items with missing fields", () => {
     const result = listResponseSchema.safeParse({
       data: [{ id: "1", name: "1" }],
-      pagination: { count: 1 }
+      pagination: { count: 1, total: 1 }
     })
+
+    expect(result.success).toBe(false)
+  })
+
+  it("requires the filtered total", () => {
+    const result = listResponseSchema.safeParse({ data: [], pagination: { count: 0 } })
 
     expect(result.success).toBe(false)
   })
