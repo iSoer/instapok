@@ -105,7 +105,7 @@ describe("generateRoster", () => {
     fc.assert(
       fc.property(fc.integer({ min: 0, max: 0x7fffffff }), fc.integer({ min: 0, max: 700 }), (seed, glory) => {
         const r = generateRoster({ seed, glory })
-        expect(r.length).toBe(glory >= 150 ? 10 : 8)
+        expect(r.length).toBe(glory >= 25 ? ROSTER.sizeWithGlory25 : ROSTER.size)
         const weapons = r.map(u => unitClass(u).weaponSkill)
         expect(weapons).toContain("whiteMagic")
         expect(weapons.filter(w => ["sword", "spear", "axe", "gauntlet"].includes(w)).length).toBeGreaterThanOrEqual(2)

@@ -34,6 +34,13 @@ export function TopHud({ battle, ui }: { battle: BattleState, ui: BattleUiState 
         </span>
       )}
       <span className="bf-grow" />
+      {battle.stats.loot > 0 && (
+        <span className="bf-chip bf-loot" title="Выбито Вкусняшек за бой">
+          🦴
+          {" "}
+          {battle.stats.loot}
+        </span>
+      )}
       <span className="bf-chip bf-biome">{biome.name}</span>
       {showFf && (
         <button

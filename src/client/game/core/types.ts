@@ -32,9 +32,10 @@ export const MAP_W = 6
 export const MAP_H = 8
 /** Уровни бойцов — уровни модели персонажа (1–80). */
 export const MAX_LEVEL = CHARACTER_MAX_LEVEL
+/** В бой выходят до 4 бойцов ростера. */
 export const SQUAD_SIZE = 4
-/** Армия = 4 слота; слоты заполняются наймом. */
-export const BARRACKS_CAP = 4
+/** Ростер (армия) — до 20 персонажей; пополняется наградами за бой и покупкой в магазине. */
+export const BARRACKS_CAP = 20
 
 export function posKey(p: Pos): string {
   return `${p.x},${p.y}`
@@ -139,7 +140,6 @@ export interface Army {
 export interface MapRewards {
   treats: number
   glory: number
-  recruitChance: number
 }
 
 export interface EnemyPlacement {
@@ -195,6 +195,8 @@ export interface BattleStats {
   turns: number
   deaths: string[]
   xpGained: Record<string, number>
+  /** Вкусняшки, выбитые из врагов за бой (остаются и при поражении). */
+  loot: number
   mvpId?: string
 }
 
@@ -316,6 +318,7 @@ export type BattleEvent
     }
     | { type: "effect", effect: Effect, hpAfter?: number }
     | { type: "died", unitId: string, killerId?: string, pos: Pos, side: Side }
+    | { type: "loot", unitId: string, pos: Pos, amount: number }
     | { type: "xp", unitId: string, amount: number, sp: number }
     | { type: "levelUp", unitId: string, level: number, gains: Partial<Stats> }
     | { type: "waited", unitId: string }
@@ -335,17 +338,20 @@ export interface Profile {
   treats: number
   wins: Record<Difficulty, number>
   armiesCreated: number
-  /** Сколько раз перемешивали текущий ростер (для цены). */
-  rosterRerolls: number
-  freeRerolls: number
-  /** Сколько наймов сделано с последнего боя: цена слота растёт и сбрасывается после боя. */
-  hiresSinceBattle: number
 }
 
+/** Магазин: витрина персонажей за Вкусняшки, обновляется после каждого боя. */
 export interface Shelter {
   candidates: UnitInstance[]
-  captive?: UnitInstance
   seed: number
+}
+
+/** Разведанный бой: карта и враги уже известны, игрок собирает под них отряд. */
+export interface PendingBattle {
+  seed: number
+  difficulty: Difficulty
+  biomeId: string
+  map: MapDef
 }
 
 export interface GlobalStats {
@@ -373,18 +379,11 @@ export interface BattleSummary {
   fallen: MemorialEntry[]
   xp: Record<string, number>
   levelUps: LevelUpSummary[]
-  rewards: { treats: number, glory: number, flawless: boolean }
-  captive?: UnitInstance
+  /** treats — всего за бой: выбитое (loot) + бонус за победу. */
+  rewards: { treats: number, loot: number, glory: number, flawless: boolean }
   mvpId?: string
   survivors: UnitInstance[]
   armyFell: boolean
-}
-
-export interface PendingRoster {
-  seed: number
-  rerolls: number
-  /** Куда вернуться после создания армии. */
-  returnTo: "battle" | "army"
 }
 
 export interface SaveGame {
@@ -398,6 +397,8 @@ export interface SaveGame {
   achievements: string[]
   settings: Settings
   stats: GlobalStats
-  pendingRoster?: PendingRoster
+  pendingBattle?: PendingBattle
+  /** Бесплатная награда за бой: три кандидата, игрок забирает одного. */
+  rewardChoice?: UnitInstance[]
   lastBattle?: BattleSummary
 }

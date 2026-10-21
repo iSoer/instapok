@@ -13,7 +13,7 @@ import type {
 } from "@game/core/types"
 import { BARRACKS_CAP, MAX_LEVEL, SQUAD_SIZE } from "@game/core/types"
 import { createEmptySave, parseSave, serializeSave } from "@game/core/save"
-import { createRng, mixSeed, randomSeed } from "@game/core/rng"
+import { createRng, randomSeed } from "@game/core/rng"
 import {
   canTakeClassNow,
   generateRoster,
@@ -27,11 +27,11 @@ import type { WeaponSkill } from "@shared/character/skills"
 import { generateMap } from "@game/core/map/generate"
 import { applyAction, createBattle } from "@game/core/battle/reducer"
 import {
-  generateShelter,
-  hireCost,
+  generateShop,
   memorialEntry,
-  rerollCost,
   resolveBattle,
+  rosterLevel,
+  unitPrice,
   sharpenCost,
   sharpenWeapon,
   trainCost,
@@ -55,14 +55,8 @@ export const $settings = computed($save, s => s.settings)
 export const $shelter = computed($save, s => s.shelter)
 export const $memorial = computed($save, s => s.memorial)
 export const $lastBattle = computed($save, s => s.lastBattle)
-export const $pendingRoster = computed($save, s => s.pendingRoster)
-
-/** Кандидаты ростера — детерминированно из seed и числа перемешиваний. */
-export const $rosterUnits = computed($save, (s): UnitInstance[] => {
-  const pr = s.pendingRoster
-  if (!pr) return []
-  return generateRoster({ seed: mixSeed(pr.seed, `reroll:${pr.rerolls}`), glory: s.profile.glory, now: s.updatedAt })
-})
+export const $pendingBattle = computed($save, s => s.pendingBattle)
+export const $rewardChoice = computed($save, s => s.rewardChoice)
 
 export const $unlockedBiomes = computed($save, (s) => {
   const totalWins = Object.values(s.profile.wins).reduce((a, b) => a + b, 0)
@@ -125,50 +119,23 @@ export function initSave(): void {
 
 /* ---------- Ростер и армия ---------- */
 
-export function beginRosterCreation(returnTo: "battle" | "army"): void {
-  updateSave((s) => {
-    if (s.pendingRoster) return { ...s, pendingRoster: { ...s.pendingRoster, returnTo } }
-    return {
-      ...s,
-      pendingRoster: { seed: randomSeed(), rerolls: 0, returnTo },
-      profile: { ...s.profile, rosterRerolls: 0 }
-    }
-  })
-}
-
-export function currentRerollCost(save: SaveGame): number {
-  const pr = save.pendingRoster
-  if (!pr) return 0
-  return rerollCost(pr.rerolls, save.profile.freeRerolls + (save.profile.glory >= 25 ? 1 : 0))
-}
-
-export function rerollRoster(): { ok: boolean, error?: string } {
+/**
+ * Выдать стартовый ростер, если армии нет (новая игра или все пали): персонажи модели с гарантиями ролей,
+ * первые 4 — в отряде. Заодно заполняет пустую витрину магазина.
+ */
+export function ensureRoster(): void {
   const s = $save.get()
-  const pr = s.pendingRoster
-  if (!pr) return { ok: false, error: "нет ростера" }
-  const cost = currentRerollCost(s)
-  if (s.profile.glory < cost) return { ok: false, error: "Недостаточно Славы" }
-  updateSave(st => ({
-    ...st,
-    profile: { ...st.profile, glory: st.profile.glory - cost, rosterRerolls: st.profile.rosterRerolls + 1 },
-    pendingRoster: pr ? { ...pr, rerolls: pr.rerolls + 1 } : st.pendingRoster
-  }))
-  return { ok: true }
-}
-
-export function confirmRoster(ids: string[]): { ok: boolean, error?: string, returnTo?: "battle" | "army" } {
-  const s = $save.get()
-  const pr = s.pendingRoster
-  if (!pr) return { ok: false, error: "нет ростера" }
-  const roster = $rosterUnits.get()
-  const picked = roster.filter(u => ids.includes(u.id))
-  if (picked.length !== SQUAD_SIZE) return { ok: false, error: `Нужно выбрать ${SQUAD_SIZE}` }
+  if (s.army && s.army.units.length > 0) {
+    if (s.shelter.candidates.length === 0)
+      updateSave(st => ({ ...st, shelter: generateShop(randomSeed(), st.army, st.profile.glory, Date.now()) }))
+    return
+  }
   const now = Date.now()
-  const units = picked.map(u => ({ ...u, createdAt: now }))
+  const units = generateRoster({ seed: randomSeed(), glory: s.profile.glory, now }).map(u => ({ ...u, createdAt: now }))
   const army: Army = {
     id: `army_${now.toString(36)}`,
     units,
-    squadIds: units.map(u => u.id),
+    squadIds: units.slice(0, SQUAD_SIZE).map(u => u.id),
     createdAt: now,
     battles: 0,
     wins: 0
@@ -177,17 +144,72 @@ export function confirmRoster(ids: string[]): { ok: boolean, error?: string, ret
     const next: SaveGame = {
       ...st,
       army,
-      shelter: generateShelter(randomSeed(), army, st.profile.glory, now),
+      shelter: generateShop(randomSeed(), army, st.profile.glory, now),
       profile: {
         ...st.profile,
         armiesCreated: st.profile.armiesCreated + 1,
         treats: st.profile.treats + (st.profile.glory >= 600 && st.profile.armiesCreated > 0 ? 500 : 0)
       }
     }
-    delete next.pendingRoster
+    delete next.pendingBattle
+    delete next.rewardChoice
     return next
   })
-  return { ok: true, returnTo: pr.returnTo }
+}
+
+/** Свободные места в ростере (из 20). */
+export function freeSlots(save: SaveGame): number {
+  return Math.max(0, BARRACKS_CAP - (save.army?.units.length ?? 0))
+}
+
+function joinRoster(st: SaveGame, cand: UnitInstance): Army {
+  const army = st.army as Army
+  const unit: UnitInstance = { ...cand, createdAt: Date.now(), isEnemy: false }
+  delete unit.factionId
+  delete unit.isBoss
+  const squadIds = army.squadIds.length < SQUAD_SIZE ? [...army.squadIds, unit.id] : army.squadIds
+  return { ...army, units: [...army.units, unit], squadIds }
+}
+
+/** Купить персонажа с витрины магазина за Вкусняшки. */
+export function buyAction(index: number): { ok: boolean, error?: string, unit?: UnitInstance } {
+  const s = $save.get()
+  if (!s.army) return { ok: false, error: "нет армии" }
+  if (freeSlots(s) === 0) return { ok: false, error: `Ростер полон (${BARRACKS_CAP})` }
+  const cand = s.shelter.candidates[index]
+  if (!cand) return { ok: false, error: "нет кандидата" }
+  const cost = unitPrice(cand)
+  if (s.profile.treats < cost) return { ok: false, error: "Недостаточно Вкусняшек" }
+  updateSave(st => ({
+    ...st,
+    army: joinRoster(st, cand),
+    shelter: { ...st.shelter, candidates: st.shelter.candidates.filter((_, i) => i !== index) },
+    profile: { ...st.profile, treats: st.profile.treats - cost }
+  }))
+  return { ok: true, unit: cand }
+}
+
+/** Забрать бесплатного персонажа из награды за бой (остальные кандидаты уходят). */
+export function claimRewardAction(index: number): { ok: boolean, error?: string, unit?: UnitInstance } {
+  const s = $save.get()
+  const cand = s.rewardChoice?.[index]
+  if (!s.army || !cand) return { ok: false, error: "нет награды" }
+  if (freeSlots(s) === 0) return { ok: false, error: `Ростер полон (${BARRACKS_CAP}) — отпустите кого-нибудь` }
+  updateSave((st) => {
+    const next: SaveGame = { ...st, army: joinRoster(st, cand) }
+    delete next.rewardChoice
+    return next
+  })
+  return { ok: true, unit: cand }
+}
+
+/** Отказаться от награды за бой. */
+export function skipRewardAction(): void {
+  updateSave((st) => {
+    const next = { ...st }
+    delete next.rewardChoice
+    return next
+  })
 }
 
 function replaceUnit(army: Army, unit: UnitInstance): Army {
@@ -301,96 +323,59 @@ export function releaseUnit(unitId: string): { ok: boolean, armyFell?: boolean }
       delete next.army
       next.stats = { ...st.stats, armiesLost: st.stats.armiesLost + 1 }
     }
-    else next.army = { ...(st.army as Army), units: remaining, squadIds: remaining.map(u => u.id) }
+    else next.army = { ...(st.army as Army), units: remaining, squadIds: (st.army as Army).squadIds.filter(id => id !== unitId) }
     return next
   })
   return { ok: true, armyFell: remaining.length === 0 }
 }
 
-/** Текущая цена найма в пустой слот. */
-export function currentHireCost(save: SaveGame): number {
-  return hireCost(save.profile.hiresSinceBattle)
-}
-
-/** Свободные слоты армии (из 4). */
-export function freeSlots(save: SaveGame): number {
-  return save.army ? Math.max(0, BARRACKS_CAP - save.army.units.length) : 0
-}
-
-/**
- * Нанять кандидата в пустой слот. source: индекс из трёх случайных кандидатов или 'captive' (пленник бесплатно).
- * После найма набор кандидатов обновляется, цена следующего найма растёт до следующего боя.
- */
-export function hireAction(source: "captive" | number): { ok: boolean, error?: string } {
-  const s = $save.get()
-  if (!s.army) return { ok: false, error: "нет армии" }
-  if (s.army.units.length >= BARRACKS_CAP) return { ok: false, error: "Все слоты заняты" }
-  const cand = source === "captive" ? s.shelter.captive : s.shelter.candidates[source]
-  if (!cand) return { ok: false, error: "нет кандидата" }
-  const cost = source === "captive" ? 0 : currentHireCost(s)
-  if (s.profile.treats < cost) return { ok: false, error: "Недостаточно Вкусняшек" }
-  updateSave((st) => {
-    const army = st.army as Army
-    const unit: UnitInstance = { ...cand, createdAt: Date.now(), isEnemy: false }
-    delete unit.factionId
-    delete unit.isBoss
-    const nextArmy: Army = { ...army, units: [...army.units, unit] }
-    nextArmy.squadIds = nextArmy.units.map(u => u.id)
-    const shelter = {
-      ...generateShelter(randomSeed(), nextArmy, st.profile.glory, Date.now()),
-      captive: st.shelter.captive
-    }
-    if (source === "captive") delete shelter.captive
-    return {
-      ...st,
-      army: nextArmy,
-      shelter,
-      profile: {
-        ...st.profile,
-        treats: st.profile.treats - cost,
-        hiresSinceBattle: source === "captive" ? st.profile.hiresSinceBattle : st.profile.hiresSinceBattle + 1
-      }
-    }
-  })
-  return { ok: true }
-}
-
-/** Совместимость: старое имя действия. */
-export const recruitAction = hireAction
-
 /* ---------- Бой ---------- */
 
-export interface StartBattleOptions {
-  difficulty: Difficulty
-  biomeId: string | "random"
-  squadIds: string[]
-  seed?: number
-}
-
-export function startBattle(opts: StartBattleOptions): { ok: boolean, error?: string, events?: BattleEvent[] } {
+/**
+ * Разведка: карта и враги боя на выбранной сложности и биоме. Уровень врагов — по уровню ростера (`rosterLevel`),
+ * поэтому разведка не зависит от того, кого игрок возьмёт в отряд. Seed закреплён до начала боя: смена настроек
+ * туда-обратно не перебрасывает врагов.
+ */
+export function scoutBattle(difficulty: Difficulty, biomeId: string | "random"): { ok: boolean, error?: string } {
   const s = $save.get()
   if (!s.army) return { ok: false, error: "нет армии" }
-  if (s.battle && !s.battle.result) return { ok: false, error: "бой уже идёт" }
-  const squad = opts.squadIds.map(id => s.army?.units.find(u => u.id === id)).filter((u): u is UnitInstance => !!u)
-  if (squad.length === 0) return { ok: false, error: "Пустой отряд" }
-  if (!difficultyUnlocked(s, opts.difficulty)) return { ok: false, error: "Сложность закрыта" }
-  const seed = opts.seed ?? randomSeed()
-  const avg = Math.round(squad.reduce((a, u) => a + u.level, 0) / squad.length)
+  if (!difficultyUnlocked(s, difficulty)) return { ok: false, error: "Сложность закрыта" }
+  const pb = s.pendingBattle
+  if (pb && pb.difficulty === difficulty && pb.biomeId === biomeId) return { ok: true }
+  const seed = pb?.seed ?? randomSeed()
   const map = generateMap({
     seed,
-    biomeId: opts.biomeId,
-    difficulty: opts.difficulty,
-    squadAvgLevel: avg,
-    squadSize: squad.length,
+    biomeId,
+    difficulty,
+    squadAvgLevel: rosterLevel(s.army),
+    squadSize: SQUAD_SIZE,
     unlockedBiomes: $unlockedBiomes.get(),
     now: Date.now()
   })
-  const { state, events } = createBattle({ map, squad, seed: createRng(seed).fork("battle").seed, now: Date.now() })
-  updateSave(st => ({
-    ...st,
-    battle: state,
-    army: st.army ? { ...st.army, squadIds: squad.map(u => u.id) } : st.army
-  }))
+  updateSave(st => ({ ...st, pendingBattle: { seed, difficulty, biomeId, map } }))
+  return { ok: true }
+}
+
+/** Начать разведанный бой выбранным отрядом (1–4 бойца ростера). */
+export function startBattle(squadIds: string[]): { ok: boolean, error?: string, events?: BattleEvent[] } {
+  const s = $save.get()
+  if (!s.army) return { ok: false, error: "нет армии" }
+  if (s.battle && !s.battle.result) return { ok: false, error: "бой уже идёт" }
+  const pb = s.pendingBattle
+  if (!pb) return { ok: false, error: "Сначала разведайте бой" }
+  const squad = squadIds.map(id => s.army?.units.find(u => u.id === id)).filter((u): u is UnitInstance => !!u)
+  if (squad.length === 0) return { ok: false, error: "Пустой отряд" }
+  if (squad.length > SQUAD_SIZE) return { ok: false, error: `В отряде не больше ${SQUAD_SIZE}` }
+  const { state, events } = createBattle({ map: pb.map, squad, seed: createRng(pb.seed).fork("battle").seed, now: Date.now() })
+  updateSave((st) => {
+    const next: SaveGame = {
+      ...st,
+      battle: state,
+      army: st.army ? { ...st.army, squadIds: squad.map(u => u.id) } : st.army
+    }
+    delete next.pendingBattle
+    return next
+  })
   return { ok: true, events }
 }
 
@@ -436,6 +421,8 @@ export function finishBattle(): BattleSummary | null {
     delete next.battle
     if (res.army) next.army = res.army
     else delete next.army
+    if (res.rewardChoice) next.rewardChoice = res.rewardChoice
+    else delete next.rewardChoice
     return next
   })
   return res.summary

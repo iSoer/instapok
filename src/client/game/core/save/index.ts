@@ -5,8 +5,8 @@ import { ARCHETYPES, statsSchema as modelStatsSchema } from "@shared/api/schema/
 import { aptitudesSchema, classIdSchema } from "@shared/api/schema/character/generated"
 import { WEAPON_SKILLS } from "@shared/character/skills"
 
-/** v4: бойцы — персонажи модели; оружие — оружейный навык модели (без отдельного «звериного» оружия). */
-export const SAVE_VERSION = 4
+/** v5: ростер до 20 персонажей, разведанный бой, магазин и бесплатная награда за бой (v4 мигрирует). */
+export const SAVE_VERSION = 5
 
 const stat = z.number()
 const partialStats = z.object({
@@ -93,7 +93,7 @@ const mapSchema = z.object({
   playerSpawns: z.array(pos),
   enemies: z.array(z.object({ unit: unitSchema, pos, stance })),
   reinforcements: z.array(z.object({ turn: z.number(), units: z.array(z.object({ unit: unitSchema, pos })) })),
-  rewards: z.object({ treats: z.number(), glory: z.number(), recruitChance: z.number() })
+  rewards: z.object({ treats: z.number(), glory: z.number() })
 })
 
 const battleUnitSchema = z.object({
@@ -130,6 +130,7 @@ const battleSchema = z.object({
     turns: z.number(),
     deaths: z.array(z.string()),
     xpGained: z.record(z.string(), z.number()),
+    loot: z.number(),
     mvpId: z.string().optional()
   }),
   spawnedWaves: z.array(z.number()),
@@ -172,8 +173,7 @@ const summarySchema = z.object({
   fallen: z.array(memorialSchema),
   xp: z.record(z.string(), z.number()),
   levelUps: z.array(levelUpSchema),
-  rewards: z.object({ treats: z.number(), glory: z.number(), flawless: z.boolean() }),
-  captive: unitSchema.optional(),
+  rewards: z.object({ treats: z.number(), loot: z.number(), glory: z.number(), flawless: z.boolean() }),
   mvpId: z.string().optional(),
   survivors: z.array(unitSchema),
   armyFell: z.boolean()
@@ -186,14 +186,11 @@ export const saveSchema = z.object({
     glory: z.number(),
     treats: z.number(),
     wins: z.object({ easy: z.number(), normal: z.number(), hard: z.number(), nightmare: z.number() }),
-    armiesCreated: z.number(),
-    rosterRerolls: z.number(),
-    freeRerolls: z.number(),
-    hiresSinceBattle: z.number()
+    armiesCreated: z.number()
   }),
   army: armySchema.optional(),
   battle: battleSchema.optional(),
-  shelter: z.object({ candidates: z.array(unitSchema), captive: unitSchema.optional(), seed: z.number() }),
+  shelter: z.object({ candidates: z.array(unitSchema), seed: z.number() }),
   memorial: z.array(memorialSchema),
   achievements: z.array(z.string()),
   settings: settingsSchema,
@@ -204,7 +201,8 @@ export const saveSchema = z.object({
     deaths: z.number(),
     armiesLost: z.number()
   }),
-  pendingRoster: z.object({ seed: z.number(), rerolls: z.number(), returnTo: z.enum(["battle", "army"]) }).optional(),
+  pendingBattle: z.object({ seed: z.number(), difficulty, biomeId: z.string(), map: mapSchema }).optional(),
+  rewardChoice: z.array(unitSchema).optional(),
   lastBattle: summarySchema.optional()
 })
 
@@ -216,10 +214,7 @@ export function createEmptySave(now: number): SaveGame {
       glory: 0,
       treats: 0,
       wins: { easy: 0, normal: 0, hard: 0, nightmare: 0 },
-      armiesCreated: 0,
-      rosterRerolls: 0,
-      freeRerolls: 0,
-      hiresSinceBattle: 0
+      armiesCreated: 0
     },
     shelter: { candidates: [], seed: 0 },
     memorial: [],
@@ -233,7 +228,24 @@ export function createEmptySave(now: number): SaveGame {
  * Миграции: ключ — версия, С которой мигрируем. Сейвы v1–v2 (шаблоны статов FEH, до модели персонажа)
  * и v3 («звериное» оружие поверх навыков модели) не переводятся, их отклоняет `parseSave`.
  */
-export const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string, unknown>> = {}
+export const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string, unknown>> = {
+  // v4 → v5: армия становится ростером (её бойцы сохраняются), Приют — магазином; пленник, наём и создание армии
+  // из ростера убраны. Бой в процессе и итоги прошлого боя отбрасываются: у них нет счётчика выбитых Вкусняшек.
+  4: (old) => {
+    const data = { ...old }
+    const profile = { ...(data["profile"] as Record<string, unknown>) }
+    delete profile["rosterRerolls"]
+    delete profile["freeRerolls"]
+    delete profile["hiresSinceBattle"]
+    data["profile"] = profile
+    data["shelter"] = { candidates: [], seed: 0 }
+    delete data["pendingRoster"]
+    delete data["battle"]
+    delete data["lastBattle"]
+    data["version"] = 5
+    return data
+  }
+}
 
 /** Первая версия сейва, которую ещё можно прочитать. */
 export const MIN_SAVE_VERSION = 4

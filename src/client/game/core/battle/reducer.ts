@@ -18,6 +18,7 @@ import { pathTo, reachableTiles, targetsFrom, wallsFrom } from "../map/pathing"
 import { simulateCombat } from "../combat"
 import { specialMaxCd, unitKit, xpMultiplier } from "../skills/engine"
 import { levelGains, visibleStats } from "../units"
+import { lootFor } from "../progression"
 import { difficultyDef, SP, XP } from "@game/content/balance"
 import { MAX_LEVEL } from "../types"
 
@@ -65,7 +66,7 @@ export function createBattle(opts: CreateBattleOptions): ReduceResult {
     roster: {},
     walls: {},
     decals: [],
-    stats: { kills: 0, damage: 0, turns: 0, deaths: [], xpGained: {} },
+    stats: { kills: 0, damage: 0, turns: 0, deaths: [], xpGained: {}, loot: 0 },
     spawnedWaves: [],
     enemyQueue: null,
     startedAt: opts.now
@@ -159,6 +160,13 @@ function killUnit(state: BattleState, u: BattleUnit, killerId: string | undefine
   const died: BattleEvent = { type: "died", unitId: u.unitId, pos: { ...u.pos }, side: u.side }
   if (killerId) died.killerId = killerId
   events.push(died)
+  // Павший враг роняет Вкусняшки: копятся за бой и достаются игроку при любом исходе
+  const fallen = state.roster[u.unitId]
+  if (u.side === "enemy" && fallen) {
+    const amount = lootFor(fallen, difficultyDef(state.difficulty).treatsMult)
+    state.stats.loot += amount
+    events.push({ type: "loot", unitId: u.unitId, pos: { ...u.pos }, amount })
+  }
 }
 
 function grantXp(state: BattleState, unitId: string, xp: number, sp: number, events: BattleEvent[]): void {

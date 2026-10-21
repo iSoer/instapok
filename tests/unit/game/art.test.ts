@@ -14,11 +14,31 @@ import {
   type Pose
 } from "@game/art/index"
 import { BIOMES } from "@game/content/biomes"
-import { CLASS_IDS, classDef, classWeapons } from "@game/content/classes"
-
-const CLASSES = CLASS_IDS.flatMap(id => classWeapons(id).map(w => classDef(id, w)))
+import { CLASS_IDS, classDef, classWeapons, fwClass } from "@game/content/classes"
 import { generateUnit } from "@game/core/units"
 import type { TerrainId } from "@game/core/types"
+import { CLASS_OUTFITS } from "@game/art/outfits"
+import { mountOf } from "@shared/character/classes"
+
+const CLASSES = CLASS_IDS.flatMap(id => classWeapons(id).map(w => classDef(id, w)))
+
+/** Миниатюра кота в наряде класса: всё, кроме класса, одинаково. */
+function classCat(classId: string, pose: Pose = "idle"): CritterArt {
+  const fw = fwClass(classId)
+  const mount = mountOf(fw)
+  return {
+    species: "cat",
+    fur: furArt(0),
+    iris: eyeArt(0),
+    pattern: 0,
+    eyes: 0,
+    accessory: 0,
+    classId,
+    tier: fw.tier,
+    ...(mount ? { mount } : {}),
+    pose
+  }
+}
 
 const TERRAINS: TerrainId[] = ["plain", "forest", "mountain", "water", "wall", "wall_breakable", "cover"]
 const POSES: Pose[] = ["idle", "run", "hurt", "dead", "happy", "carried", "blink"]
@@ -48,6 +68,9 @@ describe("арт: миниатюры", () => {
             moveType: cls.moveType,
             weapon: artWeapon(cls.weaponSkill),
             weaponColor: "#e63946",
+            classId: cls.id,
+            tier: cls.tier,
+            ...(mountOf(fwClass(cls.id)) ? { mount: mountOf(fwClass(cls.id)) } : {}),
             pose,
             boss: pose === "happy",
             angry: pose === "run"
@@ -56,6 +79,28 @@ describe("арт: миниатюры", () => {
         }
       }
     }
+  })
+  it("у каждого класса модели свой наряд, миниатюры классов различаются", () => {
+    expect(Object.keys(CLASS_OUTFITS).sort()).toEqual([...CLASS_IDS].sort())
+    const svgs = CLASS_IDS.map(id => critterSvg(classCat(id)))
+    expect(new Set(svgs).size).toBe(CLASS_IDS.length)
+    for (const pose of POSES) for (const id of CLASS_IDS) wellFormed(critterSvg(classCat(id, pose)))
+  })
+  it("ярус и животное видны: Divine — нимб, кавалерия — лошадь, летуны — крылья", () => {
+    expect(critterSvg(classCat("the-blade"))).toContain("class=\"halo\"")
+    expect(critterSvg(classCat("commoner"))).not.toContain("class=\"halo\"")
+    expect(critterSvg(classCat("light-cavalry"))).toContain("class=\"mount\"")
+    expect(critterSvg(classCat("wing-soldier"))).toContain("class=\"wings\"")
+    expect(critterSvg(classCat("bau-lord"))).toContain("class=\"wings\"")
+    expect(critterSvg(classCat("myrmidon"))).not.toContain("class=\"mount\"")
+  })
+  it("ключ кэша текстуры различает классы и оружие", () => {
+    const u = generateUnit({ seed: 77, level: 40 })
+    const other = CLASS_IDS.find(id => id !== u.classId)!
+    expect(unitArtKey({ ...u, classId: other }, "idle")).not.toBe(unitArtKey(u, "idle"))
+    const otherWeapon = u.weaponSkill === "sword" ? "axe" : "sword"
+    expect(unitArtKey({ ...u, weaponSkill: otherWeapon }, "idle")).not.toBe(unitArtKey(u, "idle"))
+    expect(unitSvg({ ...u, classId: other })).not.toBe(unitSvg(u))
   })
   it("animated-вариант содержит CSS-хуки", () => {
     const svg = critterSvg({

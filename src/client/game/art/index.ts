@@ -1,5 +1,6 @@
 import type { UnitInstance, WeaponSkill } from "@game/core/types"
-import { unitClass } from "@game/content/classes"
+import { fwClass, unitClass } from "@game/content/classes"
+import { mountOf } from "@shared/character/classes"
 import { WEAPON_COLOR } from "@game/content/weapons"
 import { critterSvg, critterPartSvg, type ArtWeapon, type CritterArt, type CritterPart, type Pose } from "./critter"
 import { eyeArt, furArt } from "./palettes"
@@ -16,6 +17,7 @@ export {
   type Pose,
   type CritterPart
 } from "./critter"
+export { CLASS_OUTFITS, outfitOf, type Outfit } from "./outfits"
 export { backdropSvg, BACKDROP } from "./backdrop"
 export { tileSvg, TILE_SIZE, TILE_FRAME_COUNT } from "./tile"
 export { svgToImage, svgDataUri, clearRasterCache } from "./raster"
@@ -64,9 +66,13 @@ export function unitArt(unit: UnitInstance, opts: UnitArtOptions = {}): CritterA
     moveType: cls.moveType,
     weapon: artWeapon(cls.weaponSkill),
     weaponColor: WEAPON_HEX[WEAPON_COLOR[cls.weaponSkill]] ?? "#adb5bd",
+    classId: cls.id,
+    tier: cls.tier,
     pose: opts.pose ?? "idle",
     animated: opts.animated ?? false
   }
+  const mount = mountOf(fwClass(unit.classId))
+  if (mount) art.mount = mount
   if (unit.isBoss) art.boss = true
   if (unit.isEnemy && !opts.friendly) art.angry = true
   if (opts.blinkDelay !== undefined) art.blinkDelay = opts.blinkDelay
@@ -77,10 +83,10 @@ export function unitSvg(unit: UnitInstance, opts: UnitArtOptions = {}): string {
   return critterSvg(unitArt(unit, opts))
 }
 
-/** Ключ кэша текстуры: всё, что влияет на картинку. */
+/** Ключ кэша текстуры: всё, что влияет на картинку (класс — наряд и животное, оружие — предмет в лапах). */
 export function unitArtKey(unit: UnitInstance, pose: Pose): string {
   const a = unit.appearance
-  return `${unit.species}:${unit.classId}:${a.furPalette}:${a.pattern}:${a.eyes}:${a.eyeColor}:${a.accessory}:${unit.isBoss ? "b" : ""}${unit.isEnemy ? "e" : ""}:${pose}`
+  return `${unit.species}:${unit.classId}:${unit.weaponSkill}:${a.furPalette}:${a.pattern}:${a.eyes}:${a.eyeColor}:${a.accessory}:${unit.isBoss ? "b" : ""}${unit.isEnemy ? "e" : ""}:${pose}`
 }
 
 export function unitPartSvg(unit: UnitInstance, part: CritterPart): string {

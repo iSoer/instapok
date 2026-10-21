@@ -1866,6 +1866,10 @@ p {
 .mini-stats b {
   color: var(--text);
 }
+/* Строка персонажа — на бумажной карточке: значения тёмные */
+.unit-row .mini-stats b {
+  color: var(--text-paper);
+}
 
 .forecast {
   display: grid;
@@ -2910,4 +2914,12 @@ p {
 .rank-cell .rank-value {
   font-family: var(--font-head);
   font-style: italic;
+}
+
+/* Награда за бой и выбитые Вкусняшки в HUD */
+.reward-card {
+  border-left: 6px solid var(--gold);
+}
+.bf-loot {
+  color: var(--gold);
 }

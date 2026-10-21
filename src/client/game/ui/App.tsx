@@ -3,7 +3,6 @@ import { useStore } from "@nanostores/react"
 import { $route, type Route } from "@game/state/router"
 import { $saveError, $saveStatus } from "@game/state/save"
 import { MenuScreen } from "./screens/MenuScreen"
-import { ArmyCreateScreen } from "./screens/ArmyCreateScreen"
 import { ArmyScreen } from "./screens/ArmyScreen"
 import { UnitScreen } from "./screens/UnitScreen"
 import { BattleSetupScreen } from "./screens/BattleSetupScreen"
@@ -77,7 +76,6 @@ function Screen({ route }: { route: Route }) {
     case "army":
       return <ArmyScreen />
     case "armyCreate":
-      return <ArmyCreateScreen />
     case "recruit":
       return <ArmyScreen />
     case "unit":

@@ -11,7 +11,7 @@ import {
   unitClassName,
   visibleStats
 } from "@game/core/units"
-import { $save, beginRosterCreation, currentHireCost } from "@game/state/save"
+import { $save, ensureRoster, freeSlots } from "@game/state/save"
 import { navigate } from "@game/state/router"
 import { haptic } from "@game/platform/haptics"
 import { Button } from "../components/Button"
@@ -19,13 +19,24 @@ import { TopBar } from "../components/TopBar"
 import { ResourceBar } from "../components/ResourceBar"
 import { UnitAvatar } from "../components/UnitAvatar"
 import { RarityStars, WeaponBadge } from "../components/Badges"
-import { HireSheet } from "../components/HireSheet"
+import { ShopSheet } from "../components/ShopSheet"
+import { RewardPicker } from "../components/RewardPicker"
 import { useToast } from "../components/Toast"
 import { MOVE_EMOJI, atkLabel } from "../lib/format"
 import { stagger } from "../lib/animate"
 
 /** Заполненный слот: краткая карточка бойца, тап — на экран бойца. */
-function FilledSlot({ unit, index, justHired }: { unit: UnitInstance, index: number, justHired: boolean }) {
+function FilledSlot({
+  unit,
+  index,
+  justHired,
+  inSquad
+}: {
+  unit: UnitInstance
+  index: number
+  justHired: boolean
+  inSquad: boolean
+}) {
   const cls = unitClass(unit)
   const st = visibleStats(unit)
   const canLearn = learnableNow(unit).some(id => skillCost(id) <= unit.sp)
@@ -62,6 +73,7 @@ function FilledSlot({ unit, index, justHired }: { unit: UnitInstance, index: num
         <WeaponBadge skill={cls.weaponSkill} />
         {canLearn && <span className="chip red pop">Есть навык</span>}
         {hasClassUpgrade(unit) && <span className="chip gold pop">Новый класс</span>}
+        {inSquad && <span className="chip squad">В отряде</span>}
       </div>
       <div className="mini-stats">
         <span>
@@ -94,63 +106,30 @@ function FilledSlot({ unit, index, justHired }: { unit: UnitInstance, index: num
   )
 }
 
-/** Пустой слот: цена найма, тап открывает выбор кандидатов. */
-function EmptySlot({
-  index,
-  cost,
-  affordable,
-  onClick
-}: {
-  index: number
-  cost: number
-  affordable: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      className={`slot-card empty ${affordable ? "" : "poor"}`}
-      style={stagger(index, 60)}
-      onClick={onClick}
-    >
-      <span className="slot-plus" aria-hidden="true">
-        +
-      </span>
-      <span className="slot-hire">Нанять бойца</span>
-      <span className="chip gold slot-price">
-        🦴
-        {cost}
-      </span>
-    </button>
-  )
-}
-
 export function ArmyScreen() {
   const save = useStore($save)
-  const [hiring, setHiring] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
   const [justHired, setJustHired] = useState<string | null>(null)
   const [toastEl, toast] = useToast()
   const army = save.army
 
+  const welcome = (unit: UnitInstance) => {
+    setJustHired(unit.id)
+    toast(`${displayName(unit)} в ростере!`)
+    window.setTimeout(() => setJustHired(cur => (cur === unit.id ? null : cur)), 900)
+  }
+
   if (!army || army.units.length === 0) {
     return (
       <div className="screen">
-        <TopBar title="Моя армия" right={<ResourceBar />} onBack={() => navigate("/", true)} />
+        <TopBar title="Ростер" right={<ResourceBar />} onBack={() => navigate("/", true)} />
         <div className="screen-body">
           <div className="empty">
             <div className="big">🪦</div>
             <h3>Казарма пуста</h3>
-            <p>Все пали или никого ещё нет. Соберите новую армию из ростера.</p>
-            <Button
-              primary
-              big
-              icon="🐾"
-              onClick={() => {
-                beginRosterCreation("army")
-                navigate("/army/create")
-              }}
-            >
-              Создать армию
+            <p>Все пали или никого ещё нет. Новый ростер выдаётся сразу; Слава остаётся с вами.</p>
+            <Button primary big icon="🐾" onClick={() => ensureRoster()}>
+              Набрать новый ростер
             </Button>
           </div>
         </div>
@@ -158,63 +137,50 @@ export function ArmyScreen() {
     )
   }
 
-  const cost = currentHireCost(save)
-  const affordable = save.profile.treats >= cost
-  const slots = Array.from({ length: BARRACKS_CAP }, (_, i) => army.units[i] ?? null)
-
-  const openHire = () => {
-    haptic("select")
-    if (!affordable && !save.shelter.captive) toast("Недостаточно Вкусняшек", true)
-    setHiring(true)
-  }
+  // Сначала отряд, затем остальные по уровню
+  const squad = new Set(army.squadIds)
+  const units = [...army.units].sort((a, b) => Number(squad.has(b.id)) - Number(squad.has(a.id)) || b.level - a.level)
 
   return (
     <div className="screen">
-      <TopBar title="Моя армия" right={<ResourceBar />} onBack={() => navigate("/", true)} />
+      <TopBar title="Ростер" right={<ResourceBar />} onBack={() => navigate("/", true)} />
       <div className="screen-body">
+        <RewardPicker toast={toast} onClaimed={welcome} />
         <div className="row between">
           <span className="muted small">
-            Отряд:
+            Персонажей:
             {" "}
             <b>{army.units.length}</b>
             /
             {BARRACKS_CAP}
           </span>
-          <span className="muted small">
-            Найм:
-            {" "}
-            <b>
-              🦴
-              {cost}
-            </b>
-          </span>
+          <span className="muted small">Отряд на бой выбирается при подготовке</span>
         </div>
         <div className="slot-grid">
-          {slots.map((u, i) =>
-            u
-              ? (
-                  <FilledSlot key={u.id} unit={u} index={i} justHired={justHired === u.id} />
-                )
-              : (
-                  <EmptySlot key={`empty-${i}`} index={i} cost={cost} affordable={affordable} onClick={openHire} />
-                )
-          )}
+          {units.map((u, i) => (
+            <FilledSlot key={u.id} unit={u} index={i} justHired={justHired === u.id} inSquad={squad.has(u.id)} />
+          ))}
         </div>
-        <p className="muted small hint-line">Цена найма растёт после каждого найма и сбрасывается после боя.</p>
-        <Button block icon="⚔️" onClick={() => navigate("/battle/setup")} primary>
-          К подготовке боя
-        </Button>
+        <div className="row" style={{ gap: 8 }}>
+          <Button
+            block
+            icon="🛒"
+            onClick={() => {
+              haptic("select")
+              setShopOpen(true)
+            }}
+          >
+            {`Магазин (${save.shelter.candidates.length})`}
+          </Button>
+          <Button block icon="⚔️" onClick={() => navigate("/battle/setup")} primary>
+            К бою
+          </Button>
+        </div>
+        {freeSlots(save) === 0 && (
+          <p className="muted small hint-line">Ростер полон: чтобы взять новых, кого-то придётся отпустить.</p>
+        )}
       </div>
-      <HireSheet
-        open={hiring}
-        onClose={() => setHiring(false)}
-        toast={toast}
-        onHired={(unit) => {
-          setJustHired(unit.id)
-          toast(`${displayName(unit)} в отряде!`)
-          window.setTimeout(() => setJustHired(cur => (cur === unit.id ? null : cur)), 900)
-        }}
-      />
+      <ShopSheet open={shopOpen} onClose={() => setShopOpen(false)} toast={toast} onBought={welcome} />
       {toastEl}
     </div>
   )

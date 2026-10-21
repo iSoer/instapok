@@ -15,7 +15,6 @@ export interface DifficultyDef {
   enemyCovers: number
   treatsMult: number
   glory: number
-  recruitChance: number
   unlock: { difficulty: Difficulty, wins: number } | null
   ai: AiProfile
 }
@@ -53,7 +52,6 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
     enemyCovers: 0,
     treatsMult: 1.0,
     glory: 1,
-    recruitChance: 0.5,
     unlock: null,
     ai: {
       wTaken: 0.3,
@@ -80,7 +78,6 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
     enemyCovers: 1,
     treatsMult: 1.6,
     glory: 3,
-    recruitChance: 0.65,
     unlock: null,
     ai: {
       wTaken: 0.7,
@@ -107,7 +104,6 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
     enemyCovers: 2,
     treatsMult: 2.5,
     glory: 7,
-    recruitChance: 0.8,
     unlock: { difficulty: "normal", wins: 3 },
     ai: {
       wTaken: 1.0,
@@ -137,7 +133,6 @@ export const DIFFICULTIES: readonly DifficultyDef[] = [
     enemyCovers: 2,
     treatsMult: 4.0,
     glory: 15,
-    recruitChance: 1.0,
     unlock: { difficulty: "hard", wins: 3 },
     ai: {
       wTaken: 1.0,
@@ -162,11 +157,7 @@ export const PRICES = {
   trainBase: 40,
   /** Уровней 80, а не 40 — рост цены за уровень вдвое меньше. */
   trainPerLevel: 6,
-  sharpen: [200, 500, 1000] as const,
-  /** Найм в пустой слот: 60, затем +20 за каждый найм до следующего боя. */
-  hireBase: 60,
-  hireStep: 20,
-  rerollRoster: [0, 10, 20, 40, 80, 160] as const
+  sharpen: [200, 500, 1000] as const
 }
 
 export const XP = {
@@ -189,19 +180,41 @@ export const SP = {
 }
 
 export const REWARDS = {
+  /** Бонус за победу (Вкусняшки карты) = (treatsBase + treatsPerLevel × уровень) × множитель сложности × victoryShare. */
   treatsBase: 40,
   treatsPerLevel: 8,
+  victoryShare: 0.5,
   flawlessBonus: 0.5,
   gloryPerDeath: 1,
   armyFallMinGlory: 5,
-  /** Если после боя в казарме меньше бойцов, чем в отряде, пленник гарантирован. */
-  guaranteeCaptiveBelow: 4
+  /** Сколько кандидатов в бесплатной награде после боя (забрать можно одного). */
+  rewardChoices: 3
 }
 
+/**
+ * Вкусняшки, которые роняет убитый враг: (base + perLevel × уровень) × редкость × вожак × множитель сложности.
+ * Медианный бой на «Нормально» с отрядом 5-го уровня даёт ~60 выбитых + ~65 за победу — примерно цена одного 3★.
+ */
+export const LOOT = {
+  base: 3,
+  perLevel: 0.6,
+  rarityMult: { 1: 1, 2: 1.15, 3: 1.3, 4: 1.5, 5: 1.75 } as Record<Rarity, number>,
+  bossMult: 5
+}
+
+/** Магазин персонажей: витрина обновляется после каждого боя, цена = (base + perLevel × уровень) × редкость. */
+export const SHOP = {
+  size: 4,
+  sizeWithGlory150: 5,
+  priceBase: 40,
+  pricePerLevel: 8,
+  rarityMult: { 1: 0.8, 2: 1.1, 3: 1.6, 4: 2.4, 5: 3.6 } as Record<Rarity, number>
+}
+
+/** Стартовый ростер новой армии (выдаётся целиком, отряд на бой выбирается из него). */
 export const ROSTER = {
-  size: 8,
-  sizeWithGlory150: 10,
-  pick: 4,
+  size: 6,
+  sizeWithGlory25: 7,
   /** С 5-го уровня открыт начальный ярус классов FW (Gladiator, Hunter, Soldier, Diviner). */
   startLevel: 5,
   startLevelWithGlory75: 10
@@ -215,10 +228,10 @@ export interface GloryTier {
 
 export const GLORY_TIERS: readonly GloryTier[] = [
   { glory: 0, rarityWeights: { 1: 40, 2: 40, 3: 20, 4: 0, 5: 0 }, bonus: "" },
-  { glory: 25, rarityWeights: { 1: 20, 2: 40, 3: 35, 4: 5, 5: 0 }, bonus: "+1 бесплатное «Перемешать»" },
+  { glory: 25, rarityWeights: { 1: 20, 2: 40, 3: 35, 4: 5, 5: 0 }, bonus: "Стартовый ростер из 7 персонажей" },
   { glory: 75, rarityWeights: { 1: 10, 2: 30, 3: 45, 4: 15, 5: 0 }, bonus: "Ростер стартует с 10 уровня" },
-  { glory: 150, rarityWeights: { 1: 0, 2: 25, 3: 50, 4: 22, 5: 3 }, bonus: "Ростер из 10 кандидатов" },
-  { glory: 300, rarityWeights: { 1: 0, 2: 10, 3: 50, 4: 32, 5: 8 }, bonus: "Один гарантированный ★5" },
+  { glory: 150, rarityWeights: { 1: 0, 2: 25, 3: 50, 4: 22, 5: 3 }, bonus: "Витрина магазина из 5 кандидатов" },
+  { glory: 300, rarityWeights: { 1: 0, 2: 10, 3: 50, 4: 32, 5: 8 }, bonus: "В стартовом ростере гарантированный ★5" },
   { glory: 600, rarityWeights: { 1: 0, 2: 0, 3: 40, 4: 45, 5: 15 }, bonus: "Стартовые Вкусняшки 500" }
 ]
 

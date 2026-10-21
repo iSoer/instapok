@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useStore } from "@nanostores/react"
-import { $save, beginRosterCreation, surrenderFromMenu } from "@game/state/save"
+import { BARRACKS_CAP } from "@game/core/types"
+import { $save, ensureRoster, surrenderFromMenu } from "@game/state/save"
 import { navigate } from "@game/state/router"
 import { generateUnit, learnableNow, skillCost } from "@game/core/units"
 import { backdropSvg } from "@game/art/index"
@@ -75,17 +76,11 @@ export function MenuScreen() {
 
   const onFight = () => {
     if (hasBattle) return navigate("/battle")
-    if (!army) {
-      beginRosterCreation("battle")
-      return navigate("/army/create")
-    }
+    ensureRoster()
     navigate("/battle/setup")
   }
   const onArmy = () => {
-    if (!army) {
-      beginRosterCreation("army")
-      return navigate("/army/create")
-    }
+    ensureRoster()
     navigate("/army")
   }
   const doSurrender = () => {
@@ -96,13 +91,13 @@ export function MenuScreen() {
   }
 
   const armyLabel = army
-    ? `Армия: ${army.units.length} ${plural(army.units.length, "боец", "бойца", "бойцов")}`
-    : "Армии нет"
+    ? `Ростер: ${army.units.length} ${plural(army.units.length, "персонаж", "персонажа", "персонажей")}`
+    : "Ростера нет"
   const fightSub = hasBattle
     ? `Ход ${battle?.turn ?? 1} · бой ждёт`
     : army
-      ? `Отряд ${army.units.length}/4 готов`
-      : "Сначала соберём отряд"
+      ? "Разведка и выбор отряда"
+      : "Получите стартовый ростер"
 
   return (
     <div className="screen menu">
@@ -144,13 +139,17 @@ export function MenuScreen() {
         <div className="relative">
           <Button big block icon="🐾" onClick={onArmy}>
             <span className="lbl">
-              Моя армия
-              <div className="sub">{army ? `${army.units.length}/4 бойцов` : "Собрать из ростера"}</div>
+              Ростер и магазин
+              <div className="sub">
+                {save.rewardChoice
+                  ? "🎁 Ждёт награда за бой"
+                  : army ? `${army.units.length}/${BARRACKS_CAP} персонажей` : "Стартовый ростер"}
+              </div>
             </span>
           </Button>
-          {pendingSkills > 0 && (
+          {(pendingSkills > 0 || !!save.rewardChoice) && (
             <span className="badge-count" title="Есть что изучить">
-              {pendingSkills}
+              {pendingSkills + (save.rewardChoice ? 1 : 0)}
             </span>
           )}
         </div>

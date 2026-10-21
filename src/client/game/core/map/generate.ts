@@ -495,7 +495,7 @@ export function generateMap(opts: GenerateMapOptions): MapDef {
     playerSpawns,
     enemies,
     reinforcements,
-    rewards: { treats, glory: diff.glory, recruitChance: diff.recruitChance }
+    rewards: { treats, glory: diff.glory }
   }
 }
 

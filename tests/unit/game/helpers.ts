@@ -162,7 +162,7 @@ export function makeBattle(
       stance: (enemies[i] as TestUnitSpec).stance ?? "advance"
     })),
     reinforcements: opts.reinforcements ?? [],
-    rewards: { treats: 100, glory: 3, recruitChance: 0 }
+    rewards: { treats: 100, glory: 3 }
   }
   const { state } = createBattle({ map, squad: pUnits, seed: 42, now: 1000 })
   return { state, players: pUnits, enemies: eUnits }

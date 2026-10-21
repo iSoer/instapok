@@ -96,6 +96,16 @@ export class GamePresenter implements Presenter {
         return this.combat(ev, before, after, map, sp)
       case "died":
         return this.died(ev.unitId, ev.pos, ev.side, after, map, sp)
+      case "loot": {
+        // Выбитые Вкусняшки всплывают над местом гибели врага
+        const c = map.center(ev.pos)
+        floatText(map, c.x, c.y - map.tile * 0.2, `+${ev.amount} 🦴`, "#ffd166", sp, {
+          size: map.tile * 0.3,
+          rise: 34,
+          duration: 900
+        })
+        return wait(map, 120 / sp)
+      }
       case "effect":
         return this.effect(ev, map, sp)
       case "assist":

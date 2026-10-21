@@ -494,10 +494,10 @@ const FALLBACK_ROSTER: readonly [string, WeaponSkill][] = [
   ["hunter", "sword"]
 ]
 
-/** Ростер с гарантиями SPEC 5.3. Детерминирован по seed. Классы — из модели на стартовом уровне. */
+/** Стартовый ростер новой армии с гарантиями ролей. Детерминирован по seed; классы — из модели на стартовом уровне. */
 export function generateRoster(opts: RosterOptions): UnitInstance[] {
   const tier = gloryTier(opts.glory)
-  const size = opts.size ?? (opts.glory >= 150 ? ROSTER.sizeWithGlory150 : ROSTER.size)
+  const size = opts.size ?? (opts.glory >= 25 ? ROSTER.sizeWithGlory25 : ROSTER.size)
   const startLevel = opts.glory >= 75 ? ROSTER.startLevelWithGlory75 : ROSTER.startLevel
   const root = createRng(opts.seed)
   const guaranteeFive = opts.glory >= 300

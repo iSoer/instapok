@@ -7,18 +7,17 @@ import type {
   MemorialEntry,
   Profile,
   SaveGame,
+  Rarity,
   Shelter,
-  Species,
   Stats,
   UnitInstance
 } from "../types"
-import { BARRACKS_CAP, MAX_LEVEL, STATS } from "../types"
+import { BARRACKS_CAP, MAX_LEVEL, SQUAD_SIZE, STATS } from "../types"
 import { generateUnit, levelGains, unitClassName } from "../units"
 import { treatsMultiplier } from "../skills/engine"
-import { PRICES, REWARDS, XP, difficultyDef, gloryTier } from "@game/content/balance"
+import { GLORY_TIERS, LOOT, PRICES, REWARDS, SHOP, XP, gloryTier } from "@game/content/balance"
 import { EPITAPHS } from "@game/content/epitaphs"
 import { personalityText } from "@game/content/personalities"
-import { factionDef } from "@game/content/factions"
 import { biomeDef } from "@game/content/biomes"
 
 /* ---------- Цены ---------- */
@@ -29,14 +28,15 @@ export function trainCost(level: number): number {
 export function sharpenCost(currentTier: number): number | null {
   return PRICES.sharpen[currentTier] ?? null
 }
-/** Цена найма в пустой слот по числу наймов с последнего боя. */
-export function hireCost(hiresSinceBattle: number): number {
-  return PRICES.hireBase + PRICES.hireStep * Math.max(0, hiresSinceBattle)
+/** Цена персонажа в магазине: растёт с уровнем и редкостью. */
+export function unitPrice(unit: Pick<UnitInstance, "level" | "rarity">): number {
+  return Math.round((SHOP.priceBase + SHOP.pricePerLevel * unit.level) * SHOP.rarityMult[unit.rarity])
 }
-export function rerollCost(rerolls: number, freeRerolls: number): number {
-  if (rerolls < 1 + freeRerolls) return 0
-  const idx = Math.min(rerolls - freeRerolls, PRICES.rerollRoster.length - 1)
-  return PRICES.rerollRoster[idx] ?? 160
+
+/** Вкусняшки, которые роняет убитый враг (множитель сложности применяется в бою). */
+export function lootFor(unit: Pick<UnitInstance, "level" | "rarity" | "isBoss">, treatsMult: number): number {
+  const base = (LOOT.base + LOOT.perLevel * unit.level) * LOOT.rarityMult[unit.rarity] * (unit.isBoss ? LOOT.bossMult : 1)
+  return Math.max(1, Math.round(base * treatsMult))
 }
 
 /* ---------- XP вне боя ---------- */
@@ -114,13 +114,13 @@ export interface BattleResolution {
   profile: Profile
   memorial: MemorialEntry[]
   shelter: Shelter
+  rewardChoice?: UnitInstance[]
 }
 
 export function resolveBattle(save: SaveGame, state: BattleState, now: number): BattleResolution {
   const army = save.army
   if (!army) throw new Error("нет армии")
   const result = state.result ?? "retreat"
-  const diff = difficultyDef(state.difficulty)
   const rng = createRng(state.seed ^ (now & 0xffff)).fork("resolve")
 
   const fallen: MemorialEntry[] = []
@@ -160,16 +160,18 @@ export function resolveBattle(save: SaveGame, state: BattleState, now: number): 
   }
 
   const flawless = result === "victory" && fallen.length === 0
-  let treats = 0
+  // Выбитое из врагов остаётся при любом исходе; победа добавляет бонус карты
+  const loot = state.stats.loot
+  let bonus = 0
   let glory = 0
   if (result === "victory") {
-    treats = state.map.rewards.treats
-    if (flawless) treats = Math.round(treats * (1 + REWARDS.flawlessBonus))
-    let mult = 1
-    for (const s of survivors) mult *= treatsMultiplier(s)
-    treats = Math.round(treats * mult)
+    bonus = Math.round(state.map.rewards.treats * REWARDS.victoryShare)
+    if (flawless) bonus = Math.round(bonus * (1 + REWARDS.flawlessBonus))
     glory = state.map.rewards.glory
   }
+  let mult = 1
+  for (const s of survivors) mult *= treatsMultiplier(s)
+  const treats = Math.round((loot + bonus) * mult)
   glory += fallen.length * REWARDS.gloryPerDeath
 
   const armyFell = nextUnits.length === 0
@@ -178,28 +180,13 @@ export function resolveBattle(save: SaveGame, state: BattleState, now: number): 
     glory += Math.max(REWARDS.armyFallMinGlory, Math.round(totalLevels / 4))
   }
 
-  let captive: UnitInstance | undefined
-  const needRecruit = nextUnits.length > 0 && nextUnits.length < REWARDS.guaranteeCaptiveBelow
-  if (result === "victory" && (needRecruit || rng.chance(diff.recruitChance))) {
-    const avg = Math.round(survivors.reduce((a, u) => a + u.level, 0) / Math.max(1, survivors.length))
-    const faction = factionDef(state.map.factionId)
-    captive = generateUnit({
-      seed: rng.int(0, 0x7fffffff),
-      level: Math.max(1, avg + rng.int(-2, 1)),
-      rarityWeights: gloryTier(save.profile.glory).rarityWeights,
-      species: rng.weighted((Object.entries(faction.species) as [Species, number][]).map(([item, w]) => ({ item, w }))),
-      now
-    })
-  }
-
   const wins = { ...save.profile.wins }
   if (result === "victory") wins[state.difficulty] = (wins[state.difficulty] ?? 0) + 1
   const profile: Profile = {
     ...save.profile,
     treats: save.profile.treats + treats,
     glory: save.profile.glory + glory,
-    wins,
-    hiresSinceBattle: 0
+    wins
   }
 
   const nextArmy: Army | undefined = armyFell
@@ -222,20 +209,20 @@ export function resolveBattle(save: SaveGame, state: BattleState, now: number): 
     fallen,
     xp: state.stats.xpGained,
     levelUps,
-    rewards: { treats, glory, flawless },
+    rewards: { treats, loot, glory, flawless },
     survivors,
     armyFell
   }
-  if (captive) summary.captive = captive
   const mvp = Object.entries(state.stats.xpGained).sort((a, b) => b[1] - a[1])[0]
   if (mvp) summary.mvpId = mvp[0]
 
-  const shelter: Shelter = nextArmy
-    ? generateShelter(rng.int(0, 0x7fffffff), nextArmy, profile.glory, now)
-    : { candidates: [], seed: 0 }
-  if (captive && nextArmy) shelter.captive = captive
+  // Магазин обновляется после каждого боя; бесплатная награда — если ростер ещё жив
+  const shelter: Shelter = generateShop(rng.int(0, 0x7fffffff), nextArmy, profile.glory, now)
+  const rewardChoice = nextArmy
+    ? generateRewardChoice(rng.int(0, 0x7fffffff), nextArmy, profile.glory, result === "victory", now)
+    : undefined
 
-  return { summary, army: nextArmy, profile, memorial: [...save.memorial, ...fallen], shelter }
+  return { summary, army: nextArmy, profile, memorial: [...save.memorial, ...fallen], shelter, rewardChoice }
 }
 
 function statDiff(a: UnitInstance, b: UnitInstance): Partial<Stats> {
@@ -258,24 +245,33 @@ function findKiller(state: BattleState, unitId: string): string | undefined {
   return best?.id
 }
 
-/* ---------- Приют ---------- */
+/* ---------- Ростер, магазин, награда ---------- */
 
-export function generateShelter(seed: number, army: Army | undefined, glory: number, now: number): Shelter {
-  const rng = createRng(seed).fork("shelter")
-  const avg
-    = army && army.units.length > 0 ? Math.round(army.units.reduce((a, u) => a + u.level, 0) / army.units.length) : 1
-  const candidates: UnitInstance[] = []
-  for (let i = 0; i < 3; i++) {
-    candidates.push(
-      generateUnit({
-        seed: rng.int(0, 0x7fffffff),
-        level: Math.max(1, avg + rng.int(-2, 1)),
-        rarityWeights: gloryTier(glory).rarityWeights,
-        now
-      })
-    )
-  }
-  return { candidates, seed }
+/** Уровень, под который подбираются враги, награды и витрина: средний уровень сильнейших бойцов отряда ростера. */
+export function rosterLevel(army: Pick<Army, "units"> | undefined): number {
+  if (!army || army.units.length === 0) return 1
+  const top = [...army.units].sort((a, b) => b.level - a.level).slice(0, SQUAD_SIZE)
+  return Math.max(1, Math.round(top.reduce((a, u) => a + u.level, 0) / top.length))
+}
+
+function candidates(seed: number, label: string, count: number, level: number, weights: Record<Rarity, number>, now: number) {
+  const rng = createRng(seed).fork(label)
+  return Array.from({ length: count }, () =>
+    generateUnit({ seed: rng.int(0, 0x7fffffff), level: Math.max(1, level + rng.int(-2, 1)), rarityWeights: weights, now })
+  )
+}
+
+/** Витрина магазина: персонажи около уровня ростера, редкость — по Славе. */
+export function generateShop(seed: number, army: Army | undefined, glory: number, now: number): Shelter {
+  const size = glory >= 150 ? SHOP.sizeWithGlory150 : SHOP.size
+  return { candidates: candidates(seed, "shop", size, rosterLevel(army), gloryTier(glory).rarityWeights, now), seed }
+}
+
+/** Бесплатная награда за бой: три кандидата; после победы — редкость следующего яруса Славы. */
+export function generateRewardChoice(seed: number, army: Army, glory: number, victory: boolean, now: number): UnitInstance[] {
+  const tier = GLORY_TIERS.indexOf(gloryTier(glory))
+  const weights = (GLORY_TIERS[victory ? Math.min(tier + 1, GLORY_TIERS.length - 1) : tier] ?? gloryTier(glory)).rarityWeights
+  return candidates(seed, "reward", REWARDS.rewardChoices, rosterLevel(army), weights, now)
 }
 
 export function canRecruit(army: Army | undefined): boolean {

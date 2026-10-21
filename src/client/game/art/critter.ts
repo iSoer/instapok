@@ -1,8 +1,11 @@
 /**
  * SVG-миниатюры котиков, собачек и мышек в стиле cat-chase.
  * Один viewBox для всех видов и снаряжения: 0 -28 120 140 (запас сверху под шарики, корону, кастрюлю).
+ * С `classId` поверх зверька рисуется наряд класса FW и его верховое животное (art/outfits.ts).
  */
+import type { ClassTier, Mount } from "@shared/character/classes"
 import { BLUSH, INK, NOSE, shade, type FurArt } from "./palettes"
+import { RIDER_TRANSFORM, hatLift, mountSvg, outfitAura, outfitBody, outfitCape, outfitHead, outfitHeadBack } from "./outfits"
 
 export type ArtSpecies = "cat" | "dog" | "mouse"
 export type Pose = "idle" | "run" | "hurt" | "dead" | "happy" | "carried" | "blink"
@@ -37,6 +40,12 @@ export interface CritterArt {
   /** Хмурые брови (враги). */
   angry?: boolean
   pose?: Pose
+  /** Класс FW (id модели): наряд класса из `CLASS_OUTFITS`. Без него — прежнее снаряжение по типу движения. */
+  classId?: string
+  /** Ярус класса: отделка одежды, у divine — нимб и сияние. */
+  tier?: ClassTier
+  /** Верховое животное класса (`mountOf` модели). */
+  mount?: Mount
   /** Добавить CSS-хуки и оба набора глаз для анимации в DOM. */
   animated?: boolean
   blinkDelay?: number
@@ -233,13 +242,14 @@ function accessory(a: CritterArt): string {
   }
 }
 
-function crown(): string {
-  return `<path d="M42 14 l6 -16 l12 10 l12 -10 l6 16 z" fill="#ffd54f" stroke="#d99a2b" stroke-width="1.5" stroke-linejoin="round" />
-    <circle cx="48" cy="-1" r="2.4" fill="#ff6f9c" /><circle cx="60" cy="8" r="2.4" fill="#8fd3f4" /><circle cx="72" cy="-1" r="2.4" fill="#ff6f9c" />`
+function crown(lift = 0): string {
+  return `<g transform="translate(0 ${lift})"><path d="M42 14 l6 -16 l12 10 l12 -10 l6 16 z" fill="#ffd54f" stroke="#d99a2b" stroke-width="1.5" stroke-linejoin="round" />
+    <circle cx="48" cy="-1" r="2.4" fill="#ff6f9c" /><circle cx="60" cy="8" r="2.4" fill="#8fd3f4" /><circle cx="72" cy="-1" r="2.4" fill="#ff6f9c" /></g>`
 }
 
-/** Снаряжение по типу движения: до тела (сзади) и после головы (спереди/сверху). */
+/** Снаряжение: до тела (сзади) и после головы (спереди/сверху). С классом — наряд и животное класса. */
 function gearBehind(a: CritterArt): string {
+  if (a.classId) return outfitCape(a)
   if (a.moveType === "cavalry") {
     return `<g class="vacuum"><ellipse cx="60" cy="104" rx="36" ry="10" fill="#2f3440" stroke="#1c2029" stroke-width="1.5" />
       <ellipse cx="60" cy="101" rx="36" ry="10" fill="#4a5262" stroke="#1c2029" stroke-width="1.5" />
@@ -259,6 +269,7 @@ function gearBehind(a: CritterArt): string {
 }
 
 function gearBody(a: CritterArt): string {
+  if (a.classId) return outfitBody(a)
   if (a.moveType === "armored" && a.species === "cat") {
     return `<g class="box"><rect x="26" y="74" width="68" height="34" rx="3" fill="#dcae72" stroke="#a8763f" stroke-width="1.5" />
       <path d="M26 74 l-9 -9 h30 l-9 9 z" fill="#e8c18b" stroke="#a8763f" stroke-width="1.2" stroke-linejoin="round" />
@@ -270,6 +281,7 @@ function gearBody(a: CritterArt): string {
 }
 
 function gearHead(a: CritterArt): string {
+  if (a.classId) return outfitHead(a)
   if (a.moveType === "armored" && a.species === "dog") {
     return `<g class="pot"><ellipse cx="60" cy="36" rx="32" ry="7" fill="#9aa3b1" stroke="#5f6773" stroke-width="1.5" />
       <path d="M30 14 h60 v22 h-60 z" fill="#b7bfcb" stroke="#5f6773" stroke-width="1.5" />
@@ -346,7 +358,7 @@ function tail(a: CritterArt, pose: Pose): string {
 }
 
 function legs(a: CritterArt, pose: Pose): string {
-  if (a.moveType === "cavalry") return ""
+  if (a.mount || (!a.classId && a.moveType === "cavalry")) return ""
   const f = a.fur
   const fill = a.pattern === 3 ? f.belly : f.fur
   const dx = pose === "run" ? 6 : pose === "carried" ? -4 : 0
@@ -373,6 +385,7 @@ function head(a: CritterArt, pose: Pose): string {
   const blushY = a.species === "mouse" ? 62 : 60
   const blush = pose === "happy" ? 0.75 : 0.55
   return `<g class="head">
+    ${outfitHeadBack(a)}
     ${ears(a, pose)}
     <circle cx="60" cy="${cy}" r="${r}" fill="${f.fur}" stroke="${f.line}" ${sw} />
     ${patternHead(a)}
@@ -383,9 +396,19 @@ function head(a: CritterArt, pose: Pose): string {
     ${whiskers(a)}
     ${accessory(a)}
     ${gearHead(a)}
-    ${a.boss ? crown() : ""}
+    ${a.boss ? crown(hatLift(a.classId)) : ""}
     ${pose === "hurt" ? "<path d=\"M96 36 q4 -8 8 0 a4 4 0 1 1 -8 0 z\" fill=\"#8ecae6\" />" : ""}
   </g>`
+}
+
+/** Сияние яруса и верховое животное — позади всадника. */
+function behindRider(a: CritterArt): string {
+  return a.classId ? outfitAura(a) + mountSvg(a) : ""
+}
+
+/** Всадник на животном уменьшен и приподнят (`RIDER_TRANSFORM`). */
+function onMount(a: CritterArt, inner: string): string {
+  return a.mount ? `<g class="rider" transform="${RIDER_TRANSFORM}">${inner}</g>` : inner
 }
 
 /** Полный SVG миниатюры. */
@@ -399,15 +422,11 @@ export function critterSvg(a: CritterArt): string {
         : pose === "carried"
           ? "transform=\"translate(60 40) scale(0.96 1.06) rotate(-6) translate(-60 -40)\""
           : ""
+  const rider = `${gearBehind(a)}${tail(a, pose)}${legs(a, pose)}${body(a)}${gearBody(a)}${head(a, pose)}${weaponProp(a)}`
   return `<svg viewBox="${VIEW_BOX}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" overflow="visible">
   <g class="rig" ${rigTransform}>
-    ${gearBehind(a)}
-    ${tail(a, pose)}
-    ${legs(a, pose)}
-    ${body(a)}
-    ${gearBody(a)}
-    ${head(a, pose)}
-    ${weaponProp(a)}
+    ${behindRider(a)}
+    ${onMount(a, rider)}
   </g>
 </svg>`
 }
@@ -445,19 +464,20 @@ export function critterPartSvg(a: CritterArt, part: CritterPart): string {
   let inner = ""
   switch (part) {
     case "head":
-      inner = `${head(dead, "dead")}<ellipse cx="60" cy="84" rx="14" ry="4" fill="#d9122b" opacity=".9" />`
+      inner = onMount(dead, `${head(dead, "dead")}<ellipse cx="60" cy="84" rx="14" ry="4" fill="#d9122b" opacity=".9" />`)
       break
     case "body":
-      inner = `${gearBehind(dead)}${body(dead)}${gearBody(dead)}${weaponProp(dead)}<ellipse cx="60" cy="70" rx="12" ry="3.5" fill="#d9122b" opacity=".9" />`
+      inner = behindRider(dead)
+        + onMount(dead, `${gearBehind(dead)}${body(dead)}${gearBody(dead)}${weaponProp(dead)}<ellipse cx="60" cy="70" rx="12" ry="3.5" fill="#d9122b" opacity=".9" />`)
       break
     case "tail":
-      inner = `${tail(dead, "idle")}<circle cx="38" cy="92" r="4" fill="#d9122b" opacity=".9" />`
+      inner = onMount(dead, `${tail(dead, "idle")}<circle cx="38" cy="92" r="4" fill="#d9122b" opacity=".9" />`)
       break
     case "legFront":
-      inner = singleLeg(dead, "front")
+      inner = onMount(dead, singleLeg(dead, "front"))
       break
     case "legBack":
-      inner = singleLeg(dead, "back")
+      inner = onMount(dead, singleLeg(dead, "back"))
       break
   }
   return `<svg viewBox="${VIEW_BOX}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" overflow="visible"><g class="rig">${inner}</g></svg>`

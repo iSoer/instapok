@@ -5,12 +5,13 @@ import type { Stats } from "@game/core/types"
 import { displayName, unitClassName } from "@game/core/units"
 import { biomeDef } from "@game/content/biomes"
 import { XP } from "@game/content/balance"
-import { $save, beginRosterCreation, freeSlots, hireAction } from "@game/state/save"
+import { $save, ensureRoster } from "@game/state/save"
 import { navigate } from "@game/state/router"
 import { Button } from "../components/Button"
 import { UnitAvatar } from "../components/UnitAvatar"
 import { StatBar } from "../components/Stats"
 import { useToast } from "../components/Toast"
+import { RewardPicker } from "../components/RewardPicker"
 import { STAT_LABELS, difficultyName, g, plural } from "../lib/format"
 import { stagger, useCountUp } from "../lib/animate"
 import { haptic } from "@game/platform/haptics"
@@ -103,22 +104,12 @@ export function BattleResultScreen() {
   if (!lb) return <div className="screen" />
 
   const title = lb.result === "victory" ? "ПОБЕДА" : lb.result === "defeat" ? "ПОРАЖЕНИЕ" : "ОТСТУПЛЕНИЕ"
-  const army = save.army
-  const captiveWaiting = !!lb.captive && !!save.shelter.captive && save.shelter.captive.id === lb.captive.id && !!army
-  const captiveAvailable = captiveWaiting && freeSlots(save) > 0
   const mvp = lb.mvpId ? lb.survivors.find(u => u.id === lb.mvpId) : undefined
   const next = delaySequence(300)
   // Карточки появляются сверху вниз: первые задержки берутся в том же порядке, что и в разметке
   const fellDelay = lb.armyFell ? next() : 0
   const rewardsDelay = next()
   const xpDelay = lb.survivors.length > 0 ? next() : 0
-
-  const acceptCaptive = () => {
-    const r = hireAction("captive")
-    if (!r.ok) return toast(r.error ?? "Ошибка", true)
-    haptic("success")
-    toast("Пленник принят в отряд")
-  }
 
   return (
     <div className="screen result-screen">
@@ -170,20 +161,20 @@ export function BattleResultScreen() {
 
         {lb.armyFell && (
           <div className="card warning-box stack pop-in" style={{ animationDelay: `${fellDelay}ms` }}>
-            <div>АРМИЯ ПАЛА</div>
+            <div>РОСТЕР ПАЛ</div>
             <div className="small" style={{ fontWeight: 400 }}>
-              Никого не осталось. Слава начислена, ростер новой армии будет лучше.
+              Никого не осталось. Слава начислена, новый стартовый ростер будет лучше.
             </div>
             <Button
               primary
               block
               icon="🐾"
               onClick={() => {
-                beginRosterCreation("army")
-                navigate("/army/create", true)
+                ensureRoster()
+                navigate("/army", true)
               }}
             >
-              Собрать новую армию
+              Набрать новый ростер
             </Button>
           </div>
         )}
@@ -199,7 +190,11 @@ export function BattleResultScreen() {
               <span className="ico">✦</span>
               <Counter value={lb.rewards.glory} />
             </span>
-            {lb.rewards.flawless && <span className="chip squad pop">Без потерь +25%</span>}
+            {lb.rewards.flawless && <span className="chip squad pop">Без потерь +50%</span>}
+          </div>
+          <div className="muted small">
+            {`Выбито из врагов: 🦴 ${lb.rewards.loot}`}
+            {lb.rewards.treats > lb.rewards.loot ? ` · за победу: 🦴 ${lb.rewards.treats - lb.rewards.loot}` : ""}
           </div>
           <div className="row wrap small muted">
             <span>
@@ -269,33 +264,7 @@ export function BattleResultScreen() {
           </div>
         )}
 
-        {lb.captive && (
-          <div className="card stack pop-in" style={{ animationDelay: `${next()}ms` }}>
-            <div className="section-title">⛓️ Пленник хочет к вам</div>
-            <div className="unit-row">
-              <UnitAvatar unit={lb.captive} size="md" friendly pose="happy" />
-              <div className="info">
-                <div className="name">{displayName(lb.captive)}</div>
-                <div className="sub">
-                  {unitClassName(lb.captive)}
-                  , ур.
-                  {lb.captive.level}
-                </div>
-              </div>
-            </div>
-            {captiveAvailable
-              ? (
-                  <Button primary block icon="🤝" onClick={acceptCaptive}>
-                    Принять в отряд (бесплатно)
-                  </Button>
-                )
-              : (
-                  <div className="muted small">
-                    {captiveWaiting ? "Слоты заняты — пленник подождёт до следующего найма." : "Пленник уже в отряде."}
-                  </div>
-                )}
-          </div>
-        )}
+        <RewardPicker toast={toast} />
 
         <div className="stack">
           {!lb.armyFell && (
@@ -309,7 +278,7 @@ export function BattleResultScreen() {
                 style={{ animationDelay: `${next(120)}ms` }}
                 onClick={() => navigate("/battle/setup", true)}
               >
-                Ещё бой
+                Следующий бой
               </Button>
               <Button
                 block
@@ -318,7 +287,7 @@ export function BattleResultScreen() {
                 style={{ animationDelay: `${next()}ms` }}
                 onClick={() => navigate("/army", true)}
               >
-                В казарму
+                Ростер и магазин
               </Button>
             </>
           )}
