@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm"
-import { pokemonInfoSchema, pokemonSchema, pokemonTagsSchema, tagsSchema } from "@db"
+import { pokemonInfoSchema, pokemonSchema, pokemonTagsSchema, tagsSchema } from "../schema"
 
 export const tagsRelations = relations(tagsSchema, ({ many }) => ({
   pokemon: many(pokemonTagsSchema)
