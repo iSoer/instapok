@@ -26,6 +26,10 @@ PostgreSQL 17 (`docker-compose.yml`) и Drizzle ORM **0.45** с `drizzle-kit` 0.
 
 Справочник способностей, уникален по `(source_id, external_id)` и `(source_id, name)`. Таблицы связей нет: покемон хранит имена своих способностей массивом `pokemon_info.abilities`, а имя (`ability.name` того же `source_id`) служит ключом. Внешнего ключа у массива нет. Подробно — в [Способности](abilities.md).
 
+### `generated_pokemon`
+
+Покемоны, созданные генератором (см. [Модель покемона](pokemon-model.md#реализация)). Со спрайтами не связаны, в `pokemon_info` не пишутся. Колонки повторяют `pokemon_info` (`types`, `abilities`, `height_dm`, `weight_hg`, `base_experience`, `stats`). Кроме того: `ability_source_id` (источник способностей, сейчас `0`), `class`, `stage_index` / `stage_of`, `archetype`, `form` (`mega` или `NULL`), `seed`, `model_version`, `request` (jsonb, из чего покемон сгенерирован). `parent_id` — FK на саму таблицу (`ON DELETE SET NULL`): предыдущая стадия или база формы. `name` уникален и при сохранении проверяется ещё и по `pokemon_info.name`. `npm run init` таблицу не очищает.
+
 ### `tags`
 
 | Колонка | Тип | Примечание |

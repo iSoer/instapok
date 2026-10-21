@@ -48,6 +48,8 @@ npm start
 | `init` | Пересоздание данных в БД (см. [База данных](database.md#заполнение-данными)). |
 | `pokemon:info` | Очередь загрузки данных покемонов из PokeAPI (см. [Данные из PokeAPI](pokemon-info.md)). |
 | `ability:info` | Очередь загрузки способностей из PokeAPI и их связей с покемонами (см. [Способности](abilities.md)). |
+| `pokemon:model` | Калибровка модели генератора по `pokemon_info` → `src/server/pokemon-model/model.json` (см. [Модель покемона](pokemon-model.md#реализация)). |
+| `pokemon:generate` | Генерация новых покемонов, `--dry-run` без записи в БД. |
 | `icons` | Одноразовая генерация PWA-иконок в `public/icons/`. |
 
 Проверка типов без сборки: `npx tsc --noEmit` (корневой проект) и `npm run typecheck:sw` (service worker).

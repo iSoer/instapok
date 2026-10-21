@@ -130,6 +130,70 @@ curl 'localhost:3000/api/pokemon/list?page=0&limit=20&tags=not-a-uuid'   # 400
 curl 'localhost:3000/api/pokemon/abilities'
 ```
 
+## Сгенерированные покемоны: `/api/pokemon/generated`
+
+Генератор новых покемонов по [модели](pokemon-model.md). Контракт — Zod-схемы в `src/shared/api/schema/pokemon/generated.ts`. Как и в остальных роутах, запрос проверяется `safeParse` (400 с `details`), собственный ответ валидируется перед отправкой (500), ошибки БД уходят только в серверный лог.
+
+### `POST /api/pokemon/generated/preview` и `POST /api/pokemon/generated`
+
+Тело одинаковое. `preview` только генерирует, второй маршрут генерирует и сохраняет. При одном и том же `seed` результат совпадает, поэтому показанный предпросмотр можно сохранить без изменений.
+
+```json
+{ "mode": "single", "request": { "types": ["fire"], "class": "stage", "stage": { "index": 3, "of": 3 } }, "seed": 42 }
+```
+
+| `mode` | Остальные поля | Результат |
+| --- | --- | --- |
+| `single` (по умолчанию) | `request: GenerateRequest` (по умолчанию `{}`) | Один покемон |
+| `line` | `request: { length: 2 \| 3, types?, archetype?, abilities? }` | Цепочка эволюции; при сохранении у каждой стадии `parentId` указывает на предыдущую |
+| `mega` | `baseId` — id сохранённого покемона | Mega-форма; `parentId` = `baseId` |
+| `custom` | `pokemon: { class, stage?, types, abilities, stats, name?, archetype? }` | Покемон со статами, распределёнными вручную (страница `/generate`). Статы сохраняются как есть; рост, вес, опыт, архетип (ближайший к статам) и имя добавляет модель. Неправдоподобные статы — 400 с `violations` от валидатора |
+
+Поля `GenerateRequest` (все необязательные): `class` (`stage` / `single` / `semiLegendary` / `pseudoLegendary` / `legendary`), `stage` (`{ index, of }`, только при `class: "stage"`), `types` (1–2 из 18), `archetype` (`physical` / `special` / `tank` / `fast` / `hpWall` / `balanced`), `bst` (175–720), `abilities` (1–3 имени из `ability`), `name` (`[a-z0-9-]`, до 40 символов). `seed` — целое 0…2³²−1; без него сервер выбирает случайный и возвращает его в каждом покемоне.
+
+Ответ — `{ "data": [покемон, …] }`, `200` у предпросмотра и `201` у сохранения:
+
+```json
+{
+  "data": [{
+    "id": "…", "parentId": null,
+    "name": "drionan", "types": ["grass"], "abilities": ["overgrow"],
+    "heightDm": 33, "weightHg": 5184, "baseExperience": 223,
+    "stats": { "hp": 60, "attack": 55, "defense": 95, "specialAttack": 70, "specialDefense": 80, "speed": 135 },
+    "class": "stage", "stage": { "index": 3, "of": 3 }, "archetype": "fast", "form": null,
+    "seed": 42, "modelVersion": 1, "input": { "mode": "single", "request": {} },
+    "explain": ["class stage 3/3", "bst 495: class stage 3/3, type grass -6", "…"]
+  }]
+}
+```
+
+`id` и `parentId` есть только у сохранённых. `input` — то, из чего покемон сгенерирован, хранится в колонке `request`. `explain` — решения генератора; он возвращается при генерации, но в БД не хранится.
+
+| Статус | Когда | Тело |
+| --- | --- | --- |
+| 400 | Тело не JSON или не проходит схему | `{ "error": "Invalid request body", "details": … }` |
+| 400 | Противоречивый запрос (`class: "legendary"` и `bst: 300`, неизвестная способность, BST в запрещённом окне, mega от первой стадии) | `{ "error": "Invalid generation request", "violations": [...] }` |
+| 404 | `mode: "mega"` с несуществующим `baseId` | `{ "error": "Base pokemon not found" }` |
+| 409 | Имя уже занято сгенерированным покемоном или есть в `pokemon_info.name` | `{ "error": "Pokemon name already taken", "names": [...] }` |
+| 500 | Ошибка БД или генератор забраковал собственный результат | `{ "error": "Error when trying to …" }` |
+
+```bash
+curl -X POST localhost:3000/api/pokemon/generated/preview -H 'content-type: application/json' \
+  -d '{"mode":"line","request":{"length":3,"types":["dragon"]},"seed":7}'
+```
+
+### `GET /api/pokemon/generated`
+
+Сохранённые покемоны, от старых к новым (`created_at, id`); `order=desc` — от новых к старым. Пагинация как у ленты: `page` (с 0) и `limit` обязательны. `types` — повторяющиеся ключи с семантикой И (`?types=fire&types=flying` — только fire/flying), пустые значения отбрасываются, максимум два типа. `class` — один из классов. Ответ: `{ "data": [...], "pagination": { "count", "total" } }`, `total` считается с тем же фильтром. Неизвестный тип или класс — 400.
+
+### `GET /api/pokemon/generated/model`
+
+Часть модели, по которой страница `/generate` строит ограничения: `classes` (ярус BST, диапазон стата, распределение числа способностей), `forbiddenBst`, `profileMean`, сдвиги профиля по `types`, `abilities` (носители по типам, сдвиг профиля, `universal`, `formOnly`) и `compensation` — правила сильных способностей (`maxShare`, `fixedStats`, `equalStats`, `bstFactor`, `statMultiplier`). Схема `generatorModelResponseSchema`, около 60 КБ, меняется только с `model.json`.
+
+### `GET` и `DELETE /api/pokemon/generated/[id]`
+
+`GET` — `{ "data": покемон }` или 404. `DELETE` — 204 или 404. Потомки удалённого (следующие стадии, формы) остаются, их `parentId` становится `null`. Не-UUID в `id` даёт 404.
+
 ## Клиентская сторона
 
 - `src/shared/api/fetcher.ts` — `fetchFn`, тонкая обёртка над `fetch`: выбрасывает ошибку при `!response.ok` и возвращает разобранный JSON.

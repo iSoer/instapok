@@ -16,7 +16,7 @@ export const resetDatabase = async () => {
   assertTestDatabase(process.env.DATABASE_URL)
 
   await db.execute(sql`
-    TRUNCATE TABLE pokemon_tags, pokemon, ability, pokemon_info, tags RESTART IDENTITY CASCADE
+    TRUNCATE TABLE pokemon_tags, pokemon, ability, pokemon_info, tags, generated_pokemon RESTART IDENTITY CASCADE
   `)
 }
 

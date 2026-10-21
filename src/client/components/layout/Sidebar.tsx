@@ -1,4 +1,5 @@
 import { memo } from "react"
+import Link from "next/link"
 import { twMerge } from "@lib/tailwind-merge"
 import { CheckboxGroup } from "@components/ui/CheckboxGroup"
 import { Input } from "@components/ui/Input"
@@ -39,6 +40,9 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
           "flex flex-col gap-12"
         )}
       >
+        <Link href="/generate" className="text-sm text-blue-400 hover:text-blue-300">
+          Generate a new pokemon →
+        </Link>
         <CheckboxGroup
           isLoading={isLoading}
           label="Select poketags:"

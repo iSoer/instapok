@@ -7,7 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 "Instapoke": a Next.js 16 (App Router) take-home assignment — an Instagram-style vertical feed of Pokémon sprites with infinite scroll and tag search (full brief in `README.md`). Two constraints from the brief shape the code:
 
 - **No third-party infinite-scroll / virtualization libraries.** The windowing and load-more logic is hand-written and must stay that way.
-- The feed is judged by scrolling through thousands of items (~2950 seeded sprites), so list render performance matters more than visual design.
+- The feed is judged by scrolling through thousands of items (~2955 seeded sprites), so list render performance matters more than visual design.
+
+**Next 16 has breaking changes vs. older Next.js** (from `AGENTS.md`): read the relevant guide in `node_modules/next/dist/docs/` before writing Next-specific code. `next dev` re-adds that block to `AGENTS.md`; leave it.
+
+Longer topic docs (in Russian) live in `docs/` (index: `docs/README.md`): api, database, feed, pwa, testing, conventions, pokemon-info, abilities, pokemon-model (statistical model of stats/types/abilities and the generator built on it). `TZ-pokemon-generator.md` in the root is the generator spec (fully implemented, UI is the `/generate` page).
 
 ## Commands
 
@@ -21,10 +25,15 @@ npm run lint              # eslint . (flat config: eslint-config-next core-web-v
 npm run lint+fix
 npx tsc --noEmit          # typecheck only (src/sw/** is excluded)
 npm run typecheck:sw      # typecheck the service worker (tsconfig.sw.json, webworker lib)
-npm test                  # Vitest: unit + integration
+npm test                  # Vitest: unit + integration (npm run test:watch for watch mode)
 npm run test:unit         # no DB needed
 npm run test:integration  # needs docker compose Postgres; uses database `instapoke_test`
 npx vitest run tests/unit/urlWithParams.test.ts   # single file
+npm run pokemon:info      # fetch PokeAPI data into pokemon_info (docs/pokemon-info.md)
+npm run ability:info      # fetch abilities into ability (docs/abilities.md)
+npm run pokemon:model     # refit src/server/pokemon-model/model.json from pokemon_info
+npm run pokemon:generate -- --line=3 --mega --dry-run   # generate new pokemon (omit --dry-run to save)
+npm run icons             # regenerate PWA icons (docs/pwa.md)
 ```
 
 ### Tests (Vitest 5, `vitest.config.mts`)
@@ -43,7 +52,7 @@ npx vitest run tests/unit/urlWithParams.test.ts   # single file
 
 ### What `npm run init` does
 
-`src/server/scripts/init.ts` runs `npx drizzle-kit push` (schema is pushed directly; there are no migration files), **TRUNCATEs `pokemon`, `pokemon_tags` and `tags`** (not `pokemon_info`; sprites are relinked to it at the end), creates the single `shiny` tag, then inserts one `pokemon` row per `*.webp` in `public/uploads/pokemon/images/`, reading width/height with `sharp`. Files named `N.shiny.webp` get the `shiny` tag; `alt` is the numeric part of the filename. Insertion order is `readdirSync` order, which matters because the list API has no `ORDER BY` (see below). Re-run after any schema or image-set change.
+`src/server/scripts/init.ts` runs `npx drizzle-kit push` (schema is pushed directly; there are no migration files), **TRUNCATEs `pokemon`, `pokemon_tags` and `tags`** (not `pokemon_info`; sprites are relinked to it at the end), creates the single `shiny` tag, then inserts one `pokemon` row per `*.webp` in `public/uploads/pokemon/images/`, reading width/height with `sharp`. Files named `N.shiny.webp` get the `shiny` tag; `alt` is the numeric part of the filename. Insertion order is `readdirSync` order, which matters because the list API orders by `created_at, id` (see below). Re-run after any schema or image-set change.
 
 `src/server/scripts/prepareWebpImages.ts` (not in `package.json`; run with `npx tsx`) is the one-off PNG→webp converter that produced the assets and the 10px-wide blur thumbnails. It reads PNGs from `src/server/tmp/pokemon{,/shiny}` and writes to `public/assets/pokemon/...`, whereas the app serves from `public/uploads/pokemon/...` — move the output if you ever regenerate images.
 
@@ -51,7 +60,7 @@ npx vitest run tests/unit/urlWithParams.test.ts   # single file
 
 ### Directory split mirrors the runtime boundary
 
-- `src/app/` — Next routes. `page.tsx` is the single `"use client"` page; `app/api/pokemon/*/route.ts` are the server route handlers.
+- `src/app/` — Next routes. `page.tsx` is the feed and `generate/page.tsx` the pokemon generator, both `"use client"`; `app/api/pokemon/*/route.ts` are the server route handlers.
 - `src/client/` — browser-only: `components/`, `api/` (SWR hooks + URL helper — **not** the route handlers), `lib/` (virtualized list, tailwind-merge wrapper).
 - `src/server/` — Node-only: Drizzle `db/` (schema, relations, connection) and `scripts/`.
 - `src/shared/` — Zod schemas and the `fetchFn` wrapper imported by both sides.
@@ -68,6 +77,7 @@ API surface:
 - `GET /api/pokemon/list?page=<0-based>&limit=<n>&tags=<uuid>&tags=<uuid>` → `{ data: ListItem[], pagination: { count, total } }`. `count` = items in this page, `total` = all items matching the filter.
 - `GET /api/pokemon/tags` → `{ data: { id, name }[] }`. Plain `db.select()`, no response validation.
 - `GET /api/pokemon/abilities` → `{ data: { name, sourceId, externalId, displayName, effect, shortEffect, flavorText, generation, isMainSeries }[] }`, every downloaded ability; `name` is the key (the values in `pokemon_info.abilities`). Response validated with `abilitiesResponseSchema`.
+- `/api/pokemon/generated`: `POST /preview` (generate only), `POST` (generate + save, 201, 409 on a taken name), `GET ?page&limit&types&class` (types AND via array containment), `GET|DELETE /[id]`, `GET /model` (public part of the model for the UI). Body `{ mode: single|line|mega|custom, request | baseId | pokemon, seed? }`; `custom` = stats chosen by hand, validated by the same validator; contract in `src/shared/api/schema/pokemon/generated.ts`. Details in `docs/api.md`.
 
 **List route** (`app/api/pokemon/list/route.ts` → `src/server/db/queries/listPokemon.ts`):
 - `tags` is read with `searchParams.getAll` (repeated keys; `urlWithParams` serializes arrays that way). The shared `tagsParam` preprocess drops empty values (the client sends `tags=` when nothing is selected → no filter), dedupes, then requires UUIDs, max `MAX_TAGS` (50). A non-UUID value is a 400, never "no filter".
@@ -89,7 +99,7 @@ Image URLs are **not** returned by the API. `page.tsx` derives them from `name`:
 
 - `src/client/lib/virtualized-list/useVirtualizedList.ts` — fixed-size windowing. The visible range lives in a `useRef`; a forced rerender (`useReducer` bump) fires **only** when `endIndex` crosses an overscan-derived threshold, or when `itemSize` / `totalSize` change — not on every scroll event. `itemSize` passed in must already include any gap (`InstagramSlider` passes `itemSize + slideGap`). The hook also attaches a `resize` listener to the scroll element, but element `resize` events never fire, so container size changes are only picked up on the next scroll.
 - `components/instagram-slider/InstagramSlider.tsx` — the renderer: a spacer `div` of `totalSize` height, an inner `div` translated by `startIndex * itemSize`, only the virtual items mounted. Calls `onLastItemShowed` from an effect when `endIndex >= itemsCount - 1`, which bumps the SWR page count. Optional CSS scroll-snap (`snap-y snap-mandatory`) and full-screen (`h-dvh`) modes; non-fullscreen height is `itemSize + 2 * containerPaddingY`.
-- `components/instagram-Infinite-scroll/InstagramInfiniteScrollSlider.tsx` — alternative non-virtualized implementation (IntersectionObserver on the last item, every item mounted). Kept for comparison; currently imported but not rendered by `page.tsx` (that unused import is one of the lint errors above).
+- `components/instagram-Infinite-scroll/InstagramInfiniteScrollSlider.tsx` — alternative non-virtualized implementation (IntersectionObserver on the last item, every item mounted). Kept for comparison; not imported anywhere.
 - `components/layout/Sidebar.tsx` is a live tuning panel for the slider props (item width/height, gap, container padding, overscan, snap, fullscreen) plus the tag checkbox list (`ui/CheckboxGroup.tsx`, emits sorted ids so the same set gives the same SWR key; `[]` clears the filter). Numeric inputs only propagate values `> 0` (overscan `>= 2`) and `page.tsx` only merges truthy values, so gap/padding can't be set to 0 from the UI.
 
 ### Database: Drizzle ORM 0.45 (classic relational-query API)
@@ -102,7 +112,17 @@ Image URLs are **not** returned by the API. `page.tsx` derives them from `name`:
 - `connection/db.ts` also exports `dbClear` (a second instance with no schema); nothing uses it.
 - `drizzle.config.ts` sets `out: ./src/server/db/generated`, but that directory does not exist — schema changes reach the DB only through `drizzle-kit push` (via `npm run init`).
 
-Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_at`, nullable `info_id` FK → `pokemon_info`, set null), `tags` (unique `name`), `pokemon_tags` (composite PK, cascade deletes), `pokemon_info` (data from an external service, unique `(source_id, external_id)`; `source_id` codes are `INFO_SOURCES` in `src/server/pokemon-info/sources.ts`, `0` = PokeAPI; filled by `npm run pokemon:info`, see `docs/pokemon-info.md`), `ability` (unique `(source_id, external_id)` and `(source_id, name)`; filled by `npm run ability:info`, see `docs/abilities.md`). There is no ability join table: `pokemon_info.abilities text[]` holds ability names in slot order, and `(source_id, name)` is the link key into `ability` (no FK, no Drizzle relation); `GET /api/pokemon/abilities` returns them all keyed by `name`. One schema file per table in `src/server/db/schema/`, re-exported from the barrel.
+Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_at`, nullable `info_id` FK → `pokemon_info`, set null), `tags` (unique `name`), `pokemon_tags` (composite PK, cascade deletes), `pokemon_info` (data from an external service, unique `(source_id, external_id)`; `source_id` codes are `INFO_SOURCES` in `src/server/pokemon-info/sources.ts`, `0` = PokeAPI; filled by `npm run pokemon:info`, see `docs/pokemon-info.md`), `ability` (unique `(source_id, external_id)` and `(source_id, name)`; filled by `npm run ability:info`, see `docs/abilities.md`). There is no ability join table: `pokemon_info.abilities text[]` holds ability names in slot order, and `(source_id, name)` is the link key into `ability` (no FK, no Drizzle relation); `GET /api/pokemon/abilities` returns them all keyed by `name`. `generated_pokemon` holds generator output (same stat columns as `pokemon_info` plus class/stage/archetype/seed/model_version/request jsonb; self-FK `parent_id` → previous stage or mega base, set null; not truncated by `npm run init`). One schema file per table in `src/server/db/schema/`, re-exported from the barrel.
+
+### Pokemon generator (`src/server/pokemon-model/`)
+
+- `fit.ts` is a pure fit over `pokemon_info` rows; `npm run pokemon:model` writes the result to `model.json`, which is **committed** and imported by `loadModel()`. The generator never touches the DB.
+- `tests/unit/pokemonModelFit.test.ts` refits from `tests/fixtures/pokemon-info.json` and expects exactly the committed `model.json`. After refitting from new data, regenerate that fixture too. Bump `MODEL_VERSION` in `schema.ts` when the format changes.
+- Generation is deterministic: all randomness goes through `createRng(seed)` (`random.ts`); no `Math.random`/`Date` in `generate.ts`. Preview and save with the same seed must give the same pokemon (integration test relies on it).
+- Every result is checked by `validate.ts`; a failure throws `GenerationError` (a generator bug → 500), while request contradictions throw `GenerateRequestError` with `violations` (→ 400). Keep the generator's noise truncation tighter than the validator bands.
+- Hand-written rules (not fitted) live in `compensation.ts`: budget-bending abilities (huge-power, wonder-guard, truant…) and form-mechanic abilities never picked at random.
+- `/generate` page: all budget logic is the pure reducer `src/client/lib/pokemon-generator/generatorState.ts` (sliders spend a BST budget, raising is blocked at 0 remaining; compensation rules from `GET /model` narrow/lock sliders). Its limits must agree with `validate.ts`: `tests/unit/generatorState.test.ts` fuzzes editing sessions against `buildCustomPokemon`.
+- `generateMegaForm` builds the result field by field: a base read from the DB carries `id`/`parentId`, and spreading it once made the insert reuse the base's primary key.
 
 ## Conventions and gotchas
 
