@@ -1,3 +1,4 @@
-export * from "./pokemonsSchema"
+export * from "./pokemonInfoSchema"
+export * from "./pokemonSchema"
 export * from "./tagsSchema"
-export * from "./pokemonsTagsSchema"
+export * from "./pokemonTagsSchema"

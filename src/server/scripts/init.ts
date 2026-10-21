@@ -1,9 +1,11 @@
 import path from "path"
 import fs from "fs"
 import { execFileSync } from "node:child_process"
-import { db, tagsSchema, pokemonsSchema, pokemonsTagsSchema } from "@db"
+import { db, tagsSchema, pokemonSchema, pokemonTagsSchema } from "@db"
 import sharp from "sharp"
 import { sql, getTableName } from "drizzle-orm"
+import { linkPokemonInfo } from "@/server/db/queries/savePokemonInfo"
+import { INFO_SOURCES } from "@/server/pokemon-info/sources"
 
 async function preparePokemonTableData(imgPath: string, shinyTag: string): Promise<void> {
   const files = fs.readdirSync(imgPath).filter(file => file.endsWith(".webp"))
@@ -15,7 +17,7 @@ async function preparePokemonTableData(imgPath: string, shinyTag: string): Promi
     const isShiny = fileName.split(".").includes("shiny")
 
     try {
-      const [{ id }] = await db.insert(pokemonsSchema).values({
+      const [{ id }] = await db.insert(pokemonSchema).values({
         name: fileName,
         width: width,
         height: height,
@@ -23,7 +25,7 @@ async function preparePokemonTableData(imgPath: string, shinyTag: string): Promi
       }).returning()
 
       if (isShiny && shinyTag) {
-        await db.insert(pokemonsTagsSchema).values({
+        await db.insert(pokemonTagsSchema).values({
           pokemonId: id,
           tagId: shinyTag
         })
@@ -50,8 +52,8 @@ async function preparePokemonTableData(imgPath: string, shinyTag: string): Promi
   try {
     await db.execute(sql`
     TRUNCATE TABLE
-        ${sql.raw(getTableName(pokemonsTagsSchema))},
-        ${sql.raw(getTableName(pokemonsSchema))},
+        ${sql.raw(getTableName(pokemonTagsSchema))},
+        ${sql.raw(getTableName(pokemonSchema))},
         ${sql.raw(getTableName(tagsSchema))}
     RESTART IDENTITY CASCADE
   `)
@@ -81,4 +83,14 @@ async function preparePokemonTableData(imgPath: string, shinyTag: string): Promi
     path.resolve("./public/uploads/pokemon/images"),
     shinyTag
   )
+
+  // pokemon_info is not truncated: reconnect the new sprite rows to info downloaded before
+  try {
+    const linked = await linkPokemonInfo(INFO_SOURCES.pokeapi)
+
+    console.log(`Linked ${linked} sprites to existing pokemon info`)
+  }
+  catch (error) {
+    console.error("Linking pokemon info error:", error)
+  }
 })()

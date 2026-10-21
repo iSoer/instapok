@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { z } from "zod"
-import { listPokemons } from "@/server/db/queries/listPokemons"
+import { listPokemon } from "@/server/db/queries/listPokemon"
 import {
   listRequestSchema,
   listResponseSchema
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { data, total } = await listPokemons(result.data)
+    const { data, total } = await listPokemon(result.data)
 
     const parsedResponse = listResponseSchema.safeParse({
       data,
@@ -56,11 +56,11 @@ export async function GET(request: NextRequest) {
     )
   }
   catch (error) {
-    console.error("Failed to list pokemons", error)
+    console.error("Failed to list pokemon", error)
 
     return Response.json(
       {
-        error: "Error when collecting pokemons"
+        error: "Error when collecting pokemon"
       },
       {
         status: 500

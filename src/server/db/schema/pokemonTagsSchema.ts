@@ -1,9 +1,9 @@
 import { pgTable, uuid, primaryKey } from "drizzle-orm/pg-core"
-import { pokemonsSchema, tagsSchema } from "./"
+import { pokemonSchema, tagsSchema } from "./"
 
-export const pokemonsTagsSchema = pgTable("pokemons_tags", {
+export const pokemonTagsSchema = pgTable("pokemon_tags", {
   pokemonId: uuid("pokemon_id")
-    .references(() => pokemonsSchema.id, { onDelete: "cascade" })
+    .references(() => pokemonSchema.id, { onDelete: "cascade" })
     .notNull(),
   tagId: uuid("tag_id")
     .references(() => tagsSchema.id, { onDelete: "cascade" })

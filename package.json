@@ -15,6 +15,7 @@
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "init": "tsx src/server/scripts/init",
+    "pokemon:info": "tsx src/server/scripts/fetchPokemonInfo",
     "icons": "tsx src/server/scripts/generatePwaIcons"
   },
   "dependencies": {

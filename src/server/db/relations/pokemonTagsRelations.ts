@@ -1,21 +1,25 @@
 import { relations } from "drizzle-orm"
-import { pokemonsSchema, pokemonsTagsSchema, tagsSchema } from "../schema"
+import { pokemonInfoSchema, pokemonSchema, pokemonTagsSchema, tagsSchema } from "@db"
 
 export const tagsRelations = relations(tagsSchema, ({ many }) => ({
-  pokemons: many(pokemonsTagsSchema)
+  pokemon: many(pokemonTagsSchema)
 }))
 
-export const pokemonsRelations = relations(pokemonsSchema, ({ many }) => ({
-  tags: many(pokemonsTagsSchema)
+export const pokemonRelations = relations(pokemonSchema, ({ one, many }) => ({
+  tags: many(pokemonTagsSchema),
+  info: one(pokemonInfoSchema, {
+    fields: [pokemonSchema.infoId],
+    references: [pokemonInfoSchema.id]
+  })
 }))
 
-export const pokemonsTagsRelations = relations(pokemonsTagsSchema, ({ one }) => ({
-  pokemon: one(pokemonsSchema, {
-    fields: [pokemonsTagsSchema.pokemonId],
-    references: [pokemonsSchema.id]
+export const pokemonTagsRelations = relations(pokemonTagsSchema, ({ one }) => ({
+  pokemon: one(pokemonSchema, {
+    fields: [pokemonTagsSchema.pokemonId],
+    references: [pokemonSchema.id]
   }),
   tag: one(tagsSchema, {
-    fields: [pokemonsTagsSchema.tagId],
+    fields: [pokemonTagsSchema.tagId],
     references: [tagsSchema.id]
   })
 }))

@@ -31,7 +31,7 @@ npx vitest run tests/unit/urlWithParams.test.ts   # single file
 
 - Two projects: `unit` (`tests/unit/**`, node env; DOM tests opt in with `// @vitest-environment jsdom`) and `integration` (`tests/integration/**`).
 - Integration tests run against a **separate database**, `TEST_DATABASE_URL` (default `.../instapoke_test`), which the config injects as `DATABASE_URL` before `@db` is imported (dotenv doesn't override it). `globalSetup` creates the DB from `template0` if missing and runs `drizzle-kit push --force` against it. Every entry point asserts the DB name ends in `_test`, so they refuse to touch the dev DB.
-- Use `seed()` from `tests/integration/utils/fixtures.ts` (truncates, then inserts tags/pokemons one by one so `created_at` follows array order). Don't use `src/server/scripts/init.ts` in tests.
+- Use `seed()` from `tests/integration/utils/fixtures.ts` (truncates, then inserts tags/pokemon one by one so `created_at` follows array order). Don't use `src/server/scripts/init.ts` in tests.
 - Integration files run serially (`fileParallelism: false`) because they share one DB. Route handlers are tested by calling the exported `GET` with a `NextRequest`.
 - The local docker volume's `template1` has a glibc collation-version mismatch (2.36 vs 2.41), so `CREATE DATABASE` without `TEMPLATE template0` fails there.
 - `next build` type-checks `tests/` too (tsconfig includes `**/*.ts`).
@@ -43,7 +43,7 @@ npx vitest run tests/unit/urlWithParams.test.ts   # single file
 
 ### What `npm run init` does
 
-`src/server/scripts/init.ts` runs `npx drizzle-kit push` (schema is pushed directly; there are no migration files), **TRUNCATEs all three tables**, creates the single `shiny` tag, then inserts one `pokemons` row per `*.webp` in `public/uploads/pokemon/images/`, reading width/height with `sharp`. Files named `N.shiny.webp` get the `shiny` tag; `alt` is the numeric part of the filename. Insertion order is `readdirSync` order, which matters because the list API has no `ORDER BY` (see below). Re-run after any schema or image-set change.
+`src/server/scripts/init.ts` runs `npx drizzle-kit push` (schema is pushed directly; there are no migration files), **TRUNCATEs `pokemon`, `pokemon_tags` and `tags`** (not `pokemon_info`; sprites are relinked to it at the end), creates the single `shiny` tag, then inserts one `pokemon` row per `*.webp` in `public/uploads/pokemon/images/`, reading width/height with `sharp`. Files named `N.shiny.webp` get the `shiny` tag; `alt` is the numeric part of the filename. Insertion order is `readdirSync` order, which matters because the list API has no `ORDER BY` (see below). Re-run after any schema or image-set change.
 
 `src/server/scripts/prepareWebpImages.ts` (not in `package.json`; run with `npx tsx`) is the one-off PNG→webp converter that produced the assets and the 10px-wide blur thumbnails. It reads PNGs from `src/server/tmp/pokemon{,/shiny}` and writes to `public/assets/pokemon/...`, whereas the app serves from `public/uploads/pokemon/...` — move the output if you ever regenerate images.
 
@@ -68,11 +68,11 @@ API surface:
 - `GET /api/pokemon/list?page=<0-based>&limit=<n>&tags=<uuid>&tags=<uuid>` → `{ data: ListItem[], pagination: { count, total } }`. `count` = items in this page, `total` = all items matching the filter.
 - `GET /api/pokemon/tags` → `{ data: { id, name }[] }`. Plain `db.select()`, no response validation.
 
-**List route** (`app/api/pokemon/list/route.ts` → `src/server/db/queries/listPokemons.ts`):
+**List route** (`app/api/pokemon/list/route.ts` → `src/server/db/queries/listPokemon.ts`):
 - `tags` is read with `searchParams.getAll` (repeated keys; `urlWithParams` serializes arrays that way). The shared `tagsParam` preprocess drops empty values (the client sends `tags=` when nothing is selected → no filter), dedupes, then requires UUIDs, max `MAX_TAGS` (50). A non-UUID value is a 400, never "no filter".
-- Filtering is in Postgres with **AND semantics**: `pokemons.id IN (SELECT pokemon_id FROM pokemons_tags WHERE tag_id IN (...) GROUP BY pokemon_id HAVING count(DISTINCT tag_id) = <n distinct>)`. With no tags the condition is omitted (never an empty `IN ()`).
-- Rows come from one `db.query.pokemonsSchema.findMany` (Drizzle builds the tag join as a lateral `json_agg`, no N+1) with `ORDER BY created_at, id` + `LIMIT/OFFSET`; `total` from `db.$count` with the **same** `where`. Both run in parallel.
-- DB errors → logged, generic 500 body. Tests: `tests/integration/listPokemonsFilter.test.ts`, `tests/unit/listRequestTags.test.ts`, `tests/unit/listRouteErrors.test.ts`.
+- Filtering is in Postgres with **AND semantics**: `pokemon.id IN (SELECT pokemon_id FROM pokemon_tags WHERE tag_id IN (...) GROUP BY pokemon_id HAVING count(DISTINCT tag_id) = <n distinct>)`. With no tags the condition is omitted (never an empty `IN ()`).
+- Rows come from one `db.query.pokemonSchema.findMany` (Drizzle builds the tag join as a lateral `json_agg`, no N+1) with `ORDER BY created_at, id` + `LIMIT/OFFSET`; `total` from `db.$count` with the **same** `where`. Both run in parallel.
+- DB errors → logged, generic 500 body. Tests: `tests/integration/listPokemonFilter.test.ts`, `tests/unit/listRequestTags.test.ts`, `tests/unit/listRouteErrors.test.ts`.
 
 `paginationRequest` / `paginationResponse` / `MIN_PAGE_SIZE` / `MAX_PAGE_SIZE` in `shared/api/schema/pagination/` are unused scaffolding; only `infiniteRequest` / `infiniteResponse` are wired up.
 
@@ -96,12 +96,12 @@ Image URLs are **not** returned by the API. `page.tsx` derives them from `name`:
 `drizzle-orm@^0.45` + `drizzle-kit@^0.31`. This is the **v0.x API**, not the 1.0 / RQB v2 API (moving to 1.0 is a separate migration: `defineRelations`, RQB v2):
 
 - Relations are declared per table with `relations(table, ({ one, many }) => ({ ... }))` in `src/server/db/relations/` and spread into the `schema` object passed to `drizzle(url, { schema: { ...schema, ...relations } })` in `connection/db.ts`. There is no `defineRelations`.
-- The relational-query accessor is keyed by the **exported variable name**, not the SQL table name: `db.query.pokemonsSchema`, `db.query.tagsSchema`, `db.query.pokemonsTagsSchema`.
+- The relational-query accessor is keyed by the **exported variable name**, not the SQL table name: `db.query.pokemonSchema`, `db.query.tagsSchema`, `db.query.pokemonTagsSchema`.
 - Many-to-many goes through the join-table relation: `with: { tags: { with: { tag: true } } }`, flattened by the caller. There is no direct many-to-many relation.
 - `connection/db.ts` also exports `dbClear` (a second instance with no schema); nothing uses it.
 - `drizzle.config.ts` sets `out: ./src/server/db/generated`, but that directory does not exist — schema changes reach the DB only through `drizzle-kit push` (via `npm run init`).
 
-Tables: `pokemons` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_at`), `tags` (unique `name`), `pokemons_tags` (composite PK, cascade deletes). One schema file per table in `src/server/db/schema/`, re-exported from the barrel.
+Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_at`, nullable `info_id` FK → `pokemon_info`, set null), `tags` (unique `name`), `pokemon_tags` (composite PK, cascade deletes), `pokemon_info` (data from an external service, unique `(source_id, external_id)`; `source_id` codes are `INFO_SOURCES` in `src/server/pokemon-info/sources.ts`, `0` = PokeAPI; filled by `npm run pokemon:info`, see `docs/pokemon-info.md`). One schema file per table in `src/server/db/schema/`, re-exported from the barrel.
 
 ## Conventions and gotchas
 

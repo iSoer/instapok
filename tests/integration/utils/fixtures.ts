@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { db, pokemonsSchema, pokemonsTagsSchema, tagsSchema } from "@db"
+import { db, pokemonSchema, pokemonTagsSchema, tagsSchema } from "@db"
 import { assertTestDatabase } from "./testDatabase"
 
 export type FixturePokemon = {
@@ -9,20 +9,20 @@ export type FixturePokemon = {
 
 export type Fixture = {
   tags: string[]
-  pokemons: FixturePokemon[]
+  pokemon: FixturePokemon[]
 }
 
 export const resetDatabase = async () => {
   assertTestDatabase(process.env.DATABASE_URL)
 
-  await db.execute(sql`TRUNCATE TABLE pokemons_tags, pokemons, tags RESTART IDENTITY CASCADE`)
+  await db.execute(sql`TRUNCATE TABLE pokemon_tags, pokemon, pokemon_info, tags RESTART IDENTITY CASCADE`)
 }
 
 /**
  * Truncates the test database and inserts the fixture.
- * Pokemons are inserted one by one so `created_at` follows array order, like the real seed script.
+ * Pokemon are inserted one by one so `created_at` follows array order, like the real seed script.
  */
-export const seed = async ({ tags, pokemons }: Fixture) => {
+export const seed = async ({ tags, pokemon }: Fixture) => {
   await resetDatabase()
 
   const tagIds: Record<string, string> = {}
@@ -33,20 +33,20 @@ export const seed = async ({ tags, pokemons }: Fixture) => {
     tagIds[name] = id
   }
 
-  for (const pokemon of pokemons) {
-    const [{ id }] = await db.insert(pokemonsSchema).values({
-      name: pokemon.name,
+  for (const fixture of pokemon) {
+    const [{ id }] = await db.insert(pokemonSchema).values({
+      name: fixture.name,
       width: 96,
       height: 96,
-      alt: pokemon.name
+      alt: fixture.name
     }).returning()
 
-    pokemonIds[pokemon.name] = id
+    pokemonIds[fixture.name] = id
 
-    const links = (pokemon.tags ?? []).map(tag => ({ pokemonId: id, tagId: tagIds[tag] }))
+    const links = (fixture.tags ?? []).map(tag => ({ pokemonId: id, tagId: tagIds[tag] }))
 
     if (links.length > 0) {
-      await db.insert(pokemonsTagsSchema).values(links)
+      await db.insert(pokemonTagsSchema).values(links)
     }
   }
 

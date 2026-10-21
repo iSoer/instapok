@@ -58,7 +58,7 @@ Sidebar (теги, настройки слайдера)
 page.tsx ── form state ──► usePokemonBank({ limit: 20, tags })   (useSWRInfinite)
    │                          │ GET /api/pokemon/list?page=N&limit=20&tags=...
    │                          ▼
-   │                    route.ts ── Zod-валидация запроса ──► listPokemons() ──► PostgreSQL
+   │                    route.ts ── Zod-валидация запроса ──► listPokemon() ──► PostgreSQL
    │                          │ ◄── Zod-валидация ответа
    │ itemList (страницы склеены, к каждому элементу добавлены URL картинок)
    ▼

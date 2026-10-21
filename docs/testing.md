@@ -30,7 +30,7 @@ npx vitest run tests/unit/urlWithParams.test.ts
 **Integration:**
 
 - `listRoute.test.ts` — smoke-тест `GET /api/pokemon/list`: страница с развёрнутыми тегами, 400 на невалидную пагинацию;
-- `listPokemonsFilter.test.ts` — фильтр по тегам (семантика И, дубликаты, отсутствие дублей строк), пагинация с фильтром и без, соответствие ответа схеме, 400 на не-UUID, совпадение `listPokemons()` с ответом маршрута.
+- `listPokemonFilter.test.ts` — фильтр по тегам (семантика И, дубликаты, отсутствие дублей строк), пагинация с фильтром и без, соответствие ответа схеме, 400 на не-UUID, совпадение `listPokemon()` с ответом маршрута.
 
 Route handler'ы тестируются прямым вызовом экспортированной функции `GET` с `NextRequest`.
 
@@ -51,7 +51,7 @@ Route handler'ы тестируются прямым вызовом экспор
 ```ts
 await seed({
   tags: ["shiny", "legendary"],
-  pokemons: [
+  pokemon: [
     { name: "1" },
     { name: "1.shiny", tags: ["shiny"] }
   ]

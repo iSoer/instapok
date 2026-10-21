@@ -1,14 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest"
 import { NextRequest } from "next/server"
 import { GET } from "@/app/api/pokemon/list/route"
-import { listPokemons } from "@/server/db/queries/listPokemons"
+import { listPokemon } from "@/server/db/queries/listPokemon"
 import { listResponseSchema, type ListResponseType } from "@shared/api/schema/pokemon/list"
 import { seed } from "./utils/fixtures"
 
 const UNKNOWN_TAG = "00000000-0000-4000-8000-000000000000"
 
 // Insertion order defines the expected response order
-const POKEMONS = [
+const POKEMON = [
   { name: "none" },
   { name: "a", tags: ["A"] },
   { name: "b", tags: ["B"] },
@@ -30,7 +30,7 @@ const tagsQuery = (...names: string[]) => names.map(name => `tags=${tagIds[name]
 const names = (body: ListResponseType) => body.data.map(item => item.name)
 
 beforeAll(async () => {
-  ({ tagIds } = await seed({ tags: ["A", "B", "C"], pokemons: POKEMONS }))
+  ({ tagIds } = await seed({ tags: ["A", "B", "C"], pokemon: POKEMON }))
 })
 
 describe("GET /api/pokemon/list — tag filter", () => {
@@ -72,7 +72,7 @@ describe("GET /api/pokemon/list — tag filter", () => {
     expect(body.pagination.total).toBe(2)
   })
 
-  it("does not duplicate pokemons and keeps their unrequested tags", async () => {
+  it("does not duplicate pokemon and keeps their unrequested tags", async () => {
     const { body } = await request(`page=0&limit=50&${tagsQuery("A", "B")}`)
     const abc = body.data.find((item: { name: string }) => item.name === "abc")
 
@@ -122,23 +122,23 @@ describe("GET /api/pokemon/list — tag filter", () => {
   })
 })
 
-describe("listPokemons", () => {
+describe("listPokemon", () => {
   it("returns the same rows and total as the route for the same filter", async () => {
-    const result = await listPokemons({ page: 0, limit: 50, tags: [tagIds.A, tagIds.B] })
+    const result = await listPokemon({ page: 0, limit: 50, tags: [tagIds.A, tagIds.B] })
 
     expect(result.data.map(item => item.name)).toEqual(["ab", "abc"])
     expect(result.total).toBe(2)
   })
 
   it("deduplicates tags itself", async () => {
-    const result = await listPokemons({ page: 0, limit: 50, tags: [tagIds.C, tagIds.C] })
+    const result = await listPokemon({ page: 0, limit: 50, tags: [tagIds.C, tagIds.C] })
 
     expect(result.data.map(item => item.name)).toEqual(["abc", "c"])
   })
 
   it("does not filter when the tag list is empty", async () => {
-    const result = await listPokemons({ page: 0, limit: 50, tags: [] })
+    const result = await listPokemon({ page: 0, limit: 50, tags: [] })
 
-    expect(result.total).toBe(POKEMONS.length)
+    expect(result.total).toBe(POKEMON.length)
   })
 })

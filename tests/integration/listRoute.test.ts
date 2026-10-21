@@ -10,7 +10,7 @@ describe("GET /api/pokemon/list (smoke)", () => {
   beforeAll(async () => {
     await seed({
       tags: ["shiny"],
-      pokemons: [
+      pokemon: [
         { name: "1" },
         { name: "1.shiny", tags: ["shiny"] },
         { name: "2" }
@@ -18,7 +18,7 @@ describe("GET /api/pokemon/list (smoke)", () => {
     })
   })
 
-  it("returns a page of pokemons with flattened tags", async () => {
+  it("returns a page of pokemon with flattened tags", async () => {
     const response = await request("page=0&limit=2")
     const body = await response.json()
 

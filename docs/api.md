@@ -28,8 +28,8 @@
 Фильтр работает по **И**: в выдачу попадают покемоны, у которых есть **все** выбранные теги (лишние теги не мешают). Фильтрация выполняется в PostgreSQL:
 
 ```sql
-pokemons.id IN (
-  SELECT pokemon_id FROM pokemons_tags
+pokemon.id IN (
+  SELECT pokemon_id FROM pokemon_tags
   WHERE tag_id IN (...)
   GROUP BY pokemon_id
   HAVING count(DISTINCT tag_id) = <число различных тегов>
@@ -72,7 +72,7 @@ URL картинок API не возвращает: клиент вычисля�
 | --- | --- | --- |
 | 400 | Невалидные query-параметры | `{ "error": "Invalid query parameters", "details": <z.flattenError> }` |
 | 500 | Ответ не прошёл собственную валидацию | `{ "error": "Internal Server Error: Invalid response format", "details": … }` |
-| 500 | Ошибка БД (подробности только в серверном логе) | `{ "error": "Error when collecting pokemons" }` |
+| 500 | Ошибка БД (подробности только в серверном логе) | `{ "error": "Error when collecting pokemon" }` |
 
 ### Примеры
 

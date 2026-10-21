@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
-vi.mock("@/server/db/queries/listPokemons", () => ({
-  listPokemons: vi.fn(async () => {
+vi.mock("@/server/db/queries/listPokemon", () => ({
+  listPokemon: vi.fn(async () => {
     throw new Error("connect ECONNREFUSED 127.0.0.1:5432 password=secret")
   })
 }))
@@ -23,7 +23,7 @@ describe("GET /api/pokemon/list errors", () => {
     const text = await response.text()
 
     expect(response.status).toBe(500)
-    expect(JSON.parse(text)).toEqual({ error: "Error when collecting pokemons" })
+    expect(JSON.parse(text)).toEqual({ error: "Error when collecting pokemon" })
     expect(text).not.toMatch(/ECONNREFUSED|secret/)
     expect(console.error).toHaveBeenCalled()
   })
