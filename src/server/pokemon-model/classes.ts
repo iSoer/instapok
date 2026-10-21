@@ -26,9 +26,13 @@ export const classOfKey = (key: ClassKey): { class: PokemonClass, stage: Stage |
 /** Weights of the primary and the secondary type when per-type shifts are combined */
 export const TYPE_WEIGHTS = [0.6, 0.4] as const
 
-/** Per-type value of a pokemon: the type's own for one type, 0.6 / 0.4 blend for two */
-export const combineByTypes = (types: readonly string[], value: (type: string) => number) => (types.length === 1
-  ? value(types[0])
-  : TYPE_WEIGHTS[0] * value(types[0]) + TYPE_WEIGHTS[1] * value(types[1]))
+/** Per-type value of a pokemon: the type's own for one type, 0.6 / 0.4 blend for two, 0 without types (characters) */
+export const combineByTypes = (types: readonly string[], value: (type: string) => number) => {
+  if (types.length === 0) {
+    return 0
+  }
+
+  return types.length === 1 ? value(types[0]) : TYPE_WEIGHTS[0] * value(types[0]) + TYPE_WEIGHTS[1] * value(types[1])
+}
 
 export const isFinalStage = (stage: Stage | null) => stage !== null && stage.index === stage.of

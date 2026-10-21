@@ -6,6 +6,8 @@ import { STAT_LABELS } from "./typeColors"
 
 export type StatSliderPropsType = {
   stat: Stat
+  // Shown instead of the pokemon stat name (the /characters page uses FE names)
+  label?: string
   value: number
   min: number
   max: number
@@ -24,6 +26,7 @@ const BLOCKED_TRACK = "repeating-linear-gradient(135deg, #262626 0 4px, #171717 
 
 export const StatSlider = memo(function StatSlider({
   stat,
+  label: labelOverride,
   value,
   min,
   max,
@@ -38,7 +41,7 @@ export const StatSlider = memo(function StatSlider({
   const valuePercent = ((value - min) / span) * 100
   const reachablePercent = ((Math.max(reachable, value) - min) / span) * 100
   const blocked = !locked && reachable <= value && value < max
-  const label = STAT_LABELS[stat]
+  const label = labelOverride ?? STAT_LABELS[stat]
 
   const style = {
     "--thumb-color": color,

@@ -34,7 +34,7 @@ export const rowToGenerated = (row: GeneratedRow): SavedGeneratedPokemonType => 
 const UNIQUE_VIOLATION = "23505"
 
 // Drizzle wraps driver errors (DrizzleQueryError), the pg error with its code is somewhere in the cause chain
-const isNameViolation = (error: unknown): boolean => {
+export const isNameViolation = (error: unknown): boolean => {
   for (let current = error; current instanceof Error; current = current.cause) {
     const { code, constraint } = current as Error & { code?: string, constraint?: string }
 

@@ -43,6 +43,9 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         <Link href="/generate" className="text-sm text-blue-400 hover:text-blue-300">
           Generate a new pokemon →
         </Link>
+        <Link href="/characters" className="text-sm text-blue-400 hover:text-blue-300">
+          Generate a new character →
+        </Link>
         <CheckboxGroup
           isLoading={isLoading}
           label="Select poketags:"

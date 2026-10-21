@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Next 16 has breaking changes vs. older Next.js** (from `AGENTS.md`): read the relevant guide in `node_modules/next/dist/docs/` before writing Next-specific code. `next dev` re-adds that block to `AGENTS.md`; leave it.
 
-Longer topic docs (in Russian) live in `docs/` (index: `docs/README.md`): api, database, feed, pwa, testing, conventions, pokemon-info, abilities, pokemon-model (statistical model of stats/types/abilities and the generator built on it). `TZ-pokemon-generator.md` in the root is the generator spec (fully implemented, UI is the `/generate` page).
+Longer topic docs (in Russian) live in `docs/` (index: `docs/README.md`): api, database, feed, pwa, testing, conventions, pokemon-info, abilities, pokemon-model (statistical model of stats/types/abilities and the generator built on it), character-model (characters derived from it: level 1-80, rarity 1-5★, Fortune's Weave weapon ranks and classes). `TZ-pokemon-generator.md` in the root is the generator spec (fully implemented, UI is the `/generate` page).
 
 ## Commands
 
@@ -33,6 +33,7 @@ npm run pokemon:info      # fetch PokeAPI data into pokemon_info (docs/pokemon-i
 npm run ability:info      # fetch abilities into ability (docs/abilities.md)
 npm run pokemon:model     # refit src/server/pokemon-model/model.json from pokemon_info
 npm run pokemon:generate -- --line=3 --mega --dry-run   # generate new pokemon (omit --dry-run to save)
+npm run character:generate -- --rarity=4 --level=40 --dry-run   # generate characters (docs/character-model.md)
 npm run icons             # regenerate PWA icons (docs/pwa.md)
 ```
 
@@ -123,6 +124,14 @@ Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_
 - Hand-written rules (not fitted) live in `compensation.ts`: budget-bending abilities (huge-power, wonder-guard, truant…) and form-mechanic abilities never picked at random.
 - `/generate` page: all budget logic is the pure reducer `src/client/lib/pokemon-generator/generatorState.ts` (sliders spend a BST budget, raising is blocked at 0 remaining; compensation rules from `GET /model` narrow/lock sliders). Its limits must agree with `validate.ts`: `tests/unit/generatorState.test.ts` fuzzes editing sessions against `buildCustomPokemon`.
 - `generateMegaForm` builds the result field by field: a base read from the DB carries `id`/`parentId`, and spreading it once made the insert reuse the base's primary key.
+
+### Character generator (`src/server/character-model/`)
+
+- Stats come from the pokemon model; pokemon types and abilities are not used. The pure `buildCharacterModel(loadModel())` derives budgets and growth (no second `model.json`): a 5★ character at level 80 is a `stage3of3` pokemon, level 1 its first stage (×1.75). Rarity 1-5★ scales the level-80 budget FEH-style; constants are hand-set in `model.ts`.
+- Weapon/movement skills, ranks E-S and the Fire Emblem: Fortune's Weave class catalog are constants in `src/shared/character/` (`skills.ts`, `classes.ts`), shared by server and client. Ranks grow with the level by aptitude (talent/normal/weak); a class is open when the level reaches its tier (1/5/20/35/45/60) and the ranks meet its `all` + one-of-`any` requirements. The class adds a flat stat bonus.
+- Stored: own stats at level 1 and 80, aptitudes, current level and class (`generated_character`). `stats` (level + class bonus) and `ranks` are derived (`derivedOf`) and checked by the validator. Divine classes are unique across characters via a partial unique index (409).
+- The generator reuses pokemon generator steps exported from `pokemon-model/generate.ts` with an empty type list (`combineByTypes([])` is 0); changing those steps changes characters too.
+- API `/api/character/generated` mirrors `/api/pokemon/generated` (modes `single` and `custom`) plus `PATCH [id]` for level up / reclass. The `/characters` page reuses the `/generate` budget reducer through `toGeneratorModel` (one "class" per rarity) and adds skills, level and class on top (`characterState.ts`). Docs: `docs/character-model.md`.
 
 ## Conventions and gotchas
 

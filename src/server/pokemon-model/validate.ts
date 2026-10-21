@@ -8,12 +8,12 @@ import type { PokemonModel } from "./schema"
 export type ValidationResult = { ok: boolean, violations: string[] }
 
 // Height and weight must be within this many residual sds of the model regressions
-const SIZE_SIGMAS = 3
+export const SIZE_SIGMAS = 3
 // Evolution BST ratios must be within this many sds of the model median
 const RATIO_SIGMAS = 2
 export const MIN_PROFILE_CORRELATION = 0.85
 // At least this share of the six stats must be multiples of 5
-const MIN_ROUND_SHARE = 0.7
+export const MIN_ROUND_SHARE = 0.7
 // Profiles flatter than this (sd of the stats) have no shape to keep, the correlation check skips them
 const FLAT_PROFILE_SD = 5
 const MAX_LINE_BST = 600
@@ -23,7 +23,7 @@ const result = (violations: string[]): ValidationResult => ({ ok: violations.len
 const bstOf = (pokemon: GeneratedPokemonType) => sum(toVector(pokemon.stats))
 
 /** |ln(value) − expected| within `sigmas` sd, allowing for rounding to an integer and for the range clamp */
-const withinBand = (value: number, expected: number, sd: number, sigmas: number, range: { min: number, max: number }) => {
+export const withinBand = (value: number, expected: number, sd: number, sigmas: number, range: { min: number, max: number }) => {
   if (value === range.min && expected < Math.log(range.min)) {
     return true
   }
@@ -49,7 +49,7 @@ export const profileCorrelation = (a: number[], b: number[]) => (stdOf(a) < FLAT
   : correlation(a, b))
 
 /** Checks shared by every pokemon, forms included */
-const validateBasics = (model: PokemonModel, pokemon: GeneratedPokemonType) => {
+export const validateBasics = (model: PokemonModel, pokemon: GeneratedPokemonType) => {
   const violations: string[] = []
   const { types, abilities } = pokemon
 

@@ -19,7 +19,8 @@
     "ability:info": "tsx src/server/scripts/fetchAbilityInfo",
     "icons": "tsx src/server/scripts/generatePwaIcons",
     "pokemon:model": "tsx src/server/scripts/fitPokemonModel",
-    "pokemon:generate": "tsx src/server/scripts/generatePokemon"
+    "pokemon:generate": "tsx src/server/scripts/generatePokemon",
+    "character:generate": "tsx src/server/scripts/generateCharacter"
   },
   "dependencies": {
     "dotenv": "^18.0.8",

@@ -126,13 +126,13 @@ const pickClass = (model: PokemonModel, rng: Rng, request: GenerateRequestType) 
 
 // Types
 
-const pickSecondType = (model: PokemonModel, rng: Rng, primary: PokemonType) => {
+export const pickSecondType = (model: PokemonModel, rng: Rng, primary: PokemonType) => {
   const entries = Object.entries(model.types[primary].secondary) as [PokemonType, number][]
 
   return entries.length > 0 ? rng.pick(entries.map(([type]) => type), entries.map(([, p]) => p)) : undefined
 }
 
-const pickTypes = (model: PokemonModel, rng: Rng): PokemonType[] => {
+export const pickTypes = (model: PokemonModel, rng: Rng): PokemonType[] => {
   const primary = rng.pick([...POKEMON_TYPES], POKEMON_TYPES.map(type => model.types[type].primary))
   const second = rng.chance(model.types[primary].secondaryP) ? pickSecondType(model, rng, primary) : undefined
 
@@ -142,7 +142,7 @@ const pickTypes = (model: PokemonModel, rng: Rng): PokemonType[] => {
 // BST
 
 /** Moves a BST out of forbidden windows and into the range, keeping multiples of 5 */
-const fitBst = (model: PokemonModel, bst: number, range: { min: number, max: number }) => {
+export const fitBst = (model: PokemonModel, bst: number, range: { min: number, max: number }) => {
   let value = clamp(round5(bst), ceil5(range.min), floor5(range.max))
 
   for (const [min, max] of model.forbiddenBst) {
@@ -156,7 +156,7 @@ const fitBst = (model: PokemonModel, bst: number, range: { min: number, max: num
   return value
 }
 
-const pickBst = (model: PokemonModel, rng: Rng, key: ClassKey, types: PokemonType[]) => {
+export const pickBst = (model: PokemonModel, rng: Rng, key: ClassKey, types: PokemonType[]) => {
   const { mean, sd, min, max } = model.classes[key].bst
   const shift = TYPE_BST_WEIGHT * combineByTypes(types, type => model.types[type as PokemonType].bstShift)
 
@@ -165,11 +165,11 @@ const pickBst = (model: PokemonModel, rng: Rng, key: ClassKey, types: PokemonTyp
 
 // Profile
 
-const typeShiftOf = (model: PokemonModel, types: PokemonType[]) => STATS
+export const typeShiftOf = (model: PokemonModel, types: PokemonType[]) => STATS
   .map(stat => combineByTypes(types, type => model.types[type as PokemonType].profileShift[stat]))
 
 /** Stat shares: mean + type shift + archetype center + correlated noise (docs/pokemon-model.md, step 4) */
-const sampleProfile = (model: PokemonModel, rng: Rng, types: PokemonType[], archetype: Archetype) => {
+export const sampleProfile = (model: PokemonModel, rng: Rng, types: PokemonType[], archetype: Archetype) => {
   const { center, cov } = model.profile.archetypes[archetype]
   const lower = cholesky(cov)
   const z = STATS.map(() => rng.truncatedNormal(0, 1, -PROFILE_NOISE_SIGMAS, PROFILE_NOISE_SIGMAS))
@@ -186,7 +186,7 @@ const sampleProfile = (model: PokemonModel, rng: Rng, types: PokemonType[], arch
 }
 
 /** Clamps shares to MIN_SHARE, applies the max-share rules of the abilities and renormalizes */
-const normalizeShares = (shares: number[], abilities: string[]) => {
+export const normalizeShares = (shares: number[], abilities: string[]) => {
   let result = toShares(shares.map(share => Math.max(share, MIN_SHARE)))
 
   for (const { rule } of compensationOf(abilities)) {
@@ -217,7 +217,7 @@ const slotKindOf = (slot: number, count: number): SlotKind => {
   return count === 3 ? (slot === 1 ? "second" : "hidden") : "secondOrHidden"
 }
 
-const pickAbilities = (
+export const pickAbilities = (
   model: PokemonModel,
   rng: Rng,
   key: ClassKey,
@@ -255,7 +255,7 @@ const pickAbilities = (
   return chosen
 }
 
-const applyAbilityShifts = (
+export const applyAbilityShifts = (
   model: PokemonModel,
   shares: number[],
   abilities: string[],
@@ -294,7 +294,7 @@ const applyAbilityShifts = (
  * Splits `target` (a multiple of 5) into multiples of 5 proportional to `weights`, within [min_i, max_i].
  * Rounding leftovers go to the values that lost the most to rounding.
  */
-const allocate = (target: number, weights: number[], mins: number[], maxs: number[]) => {
+export const allocate = (target: number, weights: number[], mins: number[], maxs: number[]) => {
   const total = sum(weights)
   const raw = weights.map(weight => (total === 0 ? target / weights.length : target * weight / total))
   const values = raw.map((value, i) => clamp(round5(value), ceil5(mins[i]), floor5(maxs[i])))
@@ -322,10 +322,17 @@ const allocate = (target: number, weights: number[], mins: number[], maxs: numbe
   return values
 }
 
-const buildStats = (model: PokemonModel, bst: number, shares: number[], key: ClassKey, abilities: string[]) => {
-  const range = model.classes[key].stat
-  const tier = bstRangeOf(model, key, abilities)
-
+/**
+ * Stats summing to `bst` (multiples of 5) within the per-stat `range`, with the abilities' rules applied.
+ * `tier` is the allowed BST range: equal stats and fixed stats are rounded to stay inside it.
+ */
+export const distributeStats = (
+  bst: number,
+  shares: number[],
+  range: { min: number, max: number },
+  tier: { min: number, max: number },
+  abilities: string[]
+) => {
   if (compensationOf(abilities).some(({ rule }) => rule.equalStats)) {
     let value = clamp(round5(bst / 6), ceil5(range.min), floor5(range.max))
 
@@ -350,11 +357,19 @@ const buildStats = (model: PokemonModel, bst: number, shares: number[], key: Cla
   return fromVector(STATS.map(stat => fixed[stat] ?? values[free.indexOf(stat)]))
 }
 
+const buildStats = (model: PokemonModel, bst: number, shares: number[], key: ClassKey, abilities: string[]) => distributeStats(
+  bst,
+  shares,
+  model.classes[key].stat,
+  bstRangeOf(model, key, abilities),
+  abilities
+)
+
 // Size and experience
 
-type SizeResiduals = { height: number, weight: number }
+export type SizeResiduals = { height: number, weight: number }
 
-const sampleSize = (model: PokemonModel, rng: Rng, bst: number, types: PokemonType[], previous?: SizeResiduals) => {
+export const sampleSize = (model: PokemonModel, rng: Rng, bst: number, types: PokemonType[], previous?: SizeResiduals) => {
   const { height, weight, heightRange, weightRange } = model.size
   const noise = () => rng.truncatedNormal(0, 1, -SIZE_NOISE_SIGMAS, SIZE_NOISE_SIGMAS)
   const persistent = (last: number | undefined) => (last === undefined
@@ -376,14 +391,14 @@ const sampleSize = (model: PokemonModel, rng: Rng, bst: number, types: PokemonTy
   return { heightDm, weightHg, residuals }
 }
 
-const pickExperience = (model: PokemonModel, rng: Rng, key: ClassKey, bst: number) => {
+export const pickExperience = (model: PokemonModel, rng: Rng, key: ClassKey, bst: number) => {
   const { experience } = model.classes[key]
   const k = rng.pick(experience.map(({ value }) => value), experience.map(({ p }) => p))
 
   return { k, baseExperience: Math.round(bst * k) }
 }
 
-const pickArchetype = (model: PokemonModel, rng: Rng) => rng.pick(
+export const pickArchetype = (model: PokemonModel, rng: Rng) => rng.pick(
   [...ARCHETYPES],
   ARCHETYPES.map(archetype => model.profile.archetypes[archetype].weight)
 )
@@ -479,7 +494,7 @@ export const generatePokemon = (model: PokemonModel, request: GenerateRequestTyp
 }
 
 /** Archetype whose center is closest to the shares left after the type shift */
-const nearestArchetype = (model: PokemonModel, shares: number[], types: PokemonType[]): Archetype => {
+export const nearestArchetype = (model: PokemonModel, shares: number[], types: PokemonType[]): Archetype => {
   const typeShift = typeShiftOf(model, types)
   const residual = STATS.map((stat, j) => shares[j] - model.profile.mean[stat] - typeShift[j])
   const distance = (archetype: Archetype) => sum(STATS

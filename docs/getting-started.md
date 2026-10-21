@@ -50,6 +50,7 @@ npm start
 | `ability:info` | Очередь загрузки способностей из PokeAPI и их связей с покемонами (см. [Способности](abilities.md)). |
 | `pokemon:model` | Калибровка модели генератора по `pokemon_info` → `src/server/pokemon-model/model.json` (см. [Модель покемона](pokemon-model.md#реализация)). |
 | `pokemon:generate` | Генерация новых покемонов, `--dry-run` без записи в БД. |
+| `character:generate` | Генерация персонажей с редкостью, уровнем, навыками и классом ([Модель персонажа](character-model.md)), `--dry-run` без записи в БД. |
 | `icons` | Одноразовая генерация PWA-иконок в `public/icons/`. |
 
 Проверка типов без сборки: `npx tsc --noEmit` (корневой проект) и `npm run typecheck:sw` (service worker).

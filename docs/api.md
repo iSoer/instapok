@@ -194,6 +194,65 @@ curl -X POST localhost:3000/api/pokemon/generated/preview -H 'content-type: appl
 
 `GET` — `{ "data": покемон }` или 404. `DELETE` — 204 или 404. Потомки удалённого (следующие стадии, формы) остаются, их `parentId` становится `null`. Не-UUID в `id` даёт 404.
 
+## Сгенерированные персонажи: `/api/character/generated`
+
+Генератор персонажей по [модели персонажа](character-model.md): редкость, уровень, навыки с рангами и классы Fire Emblem: Fortune's Weave. Контракт — `src/shared/api/schema/character/generated.ts`. Маршруты устроены как у покемонов: `safeParse` запроса (400 с `details`), проверка собственного ответа (500), детерминизм по `seed`.
+
+### `POST /api/character/generated/preview` и `POST /api/character/generated`
+
+```json
+{ "mode": "single", "request": { "rarity": 4, "class": "bow-knight" }, "seed": 42 }
+```
+
+| `mode` | Остальные поля | Результат |
+| --- | --- | --- |
+| `single` (по умолчанию) | `request` (по умолчанию `{}`): `rarity` (1–5), `archetype`, `budget` (сумма собственных статов на 80-м уровне), `talents` (1–3 навыка), `level` (1–80), `class` (id класса), `name` — всё необязательно | Персонаж от модели. При `class` без `talents` модель сама выбирает нужные таланты, без `level` — первый уровень, на котором класс открыт |
+| `custom` | `character: { rarity, talents, weaknesses?, maxStats, level, class, name?, archetype? }` | Персонаж, собранный вручную (страница `/characters`). Модель добавляет статы 1-го уровня, рост, вес, опыт, архетип и имя. Закрытый на этом уровне класс и прочие нарушения — 400 с `violations` |
+
+Навыки: `sword`, `axe`, `spear`, `bow`, `gauntlet`, `whiteMagic`, `blackMagic`, `riding`, `flying`, `heavyArmor`. Ответ — `{ "data": [персонаж] }`, `200` у предпросмотра и `201` у сохранения:
+
+```json
+{
+  "data": [{
+    "id": "…", "name": "drypaen", "rarity": 4,
+    "aptitudes": { "sword": "normal", "axe": "normal", "spear": "talent", "bow": "normal", "gauntlet": "normal",
+                   "whiteMagic": "weak", "blackMagic": "weak", "riding": "talent", "flying": "normal", "heavyArmor": "normal" },
+    "heightDm": 21, "weightHg": 473, "baseExperience": 260,
+    "baseStats": { "hp": 49, "attack": 71, "defense": 74, "specialAttack": 23, "specialDefense": 36, "speed": 45 },
+    "maxStats": { "hp": 85, "attack": 125, "defense": 130, "specialAttack": 40, "specialDefense": 65, "speed": 75 },
+    "level": 60, "class": "the-cavalier",
+    "stats": { "hp": 93, "attack": 137, "defense": 130, "specialAttack": 33, "specialDefense": 63, "speed": 76 },
+    "ranks": { "sword": "B", "axe": "B", "spear": "S", "bow": "B", "gauntlet": "B",
+               "whiteMagic": "D", "blackMagic": "D", "riding": "S", "flying": "B", "heavyArmor": "B" },
+    "archetype": "physical", "seed": 1, "modelVersion": 2,
+    "input": { "mode": "single", "request": { "class": "the-cavalier" } },
+    "explain": ["rarity 4★", "archetype physical", "budget 520: 5★ BST 540 × 0.9651 for 4★",
+                "talents Spear, Riding; weak in White Magic, Black Magic", "level 60 (first level the class opens at)", "…"]
+  }]
+}
+```
+
+`stats` (статы на текущем уровне с бонусом класса) и `ranks` (ранги на текущем уровне) вычисляются, в БД не хранятся.
+
+| Статус | Когда | Тело |
+| --- | --- | --- |
+| 400 | Тело не проходит схему или запрос противоречив (`rarity: 1` и `budget: 540`, класс ниже уровня своего яруса, таланты не открывают класс) | `{ "error": …, "violations": [...] }` или `{ "error": …, "details": … }` |
+| 409 | Имя уже занято другим персонажем | `{ "error": "Character name already taken", "names": [...] }` |
+| 409 | Divine-класс уже у другого персонажа | `{ "error": "Divine class already held by another character", "class": "the-blade" }` |
+| 500 | Ошибка БД или генератор забраковал свой результат | `{ "error": "Error when trying to …" }` |
+
+### `GET /api/character/generated`
+
+Сохранённые персонажи. `page` и `limit` обязательны, `order=asc|desc`, фильтры `rarity` (1–5) и `class` (id). Ответ: `{ "data": [...], "pagination": { "count", "total" } }`.
+
+### `GET /api/character/generated/model`
+
+Редкости (ярус бюджета, диапазон стата, `budgetFactor`, `baseMultiplier`, `growthMultiplier`), `growth`, `profileMean`, `minLevel`, `maxLevel` и уровни ярусов классов (`tiers`). Навыки, ранги и каталог классов — константы `src/shared/character/`, страница импортирует их напрямую.
+
+### `GET`, `PATCH` и `DELETE /api/character/generated/[id]`
+
+`GET` — `{ "data": персонаж, "availableClasses": [id, …] }`: классы, открытые на текущем уровне. `PATCH` с телом `{ "level"?, "class"? }` повышает уровень и/или меняет класс и отвечает в том же виде. Уровень только растёт, класс должен быть открыт на новом уровне (иначе 400), занятый Divine-класс — 409. `DELETE` — 204 или 404. Не-UUID в `id` даёт 404.
+
 ## Клиентская сторона
 
 - `src/shared/api/fetcher.ts` — `fetchFn`, тонкая обёртка над `fetch`: выбрасывает ошибку при `!response.ok` и возвращает разобранный JSON.

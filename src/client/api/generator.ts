@@ -15,7 +15,11 @@ export type GeneratorResult<T>
  * POST to the generator. Unlike fetchFn it keeps the error body: 400 and 409 carry the
  * violations / taken names the page shows next to the form.
  */
-const postGenerator = async <T>(url: string, body: GeneratorBody, signal?: AbortSignal): Promise<GeneratorResult<T>> => {
+export const postGenerator = async <T, B = GeneratorBody>(
+  url: string,
+  body: B,
+  signal?: AbortSignal
+): Promise<GeneratorResult<T>> => {
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
