@@ -46,6 +46,9 @@ export const Sidebar = memo(function Sidebar({ initialValues, onChange }: Sideba
         <Link href="/characters" className="text-sm text-blue-400 hover:text-blue-300">
           Generate a new character →
         </Link>
+        <Link href="/game" className="text-sm text-blue-400 hover:text-blue-300">
+          Play Pawfield (tactics with these characters) →
+        </Link>
         <CheckboxGroup
           isLoading={isLoading}
           label="Select poketags:"

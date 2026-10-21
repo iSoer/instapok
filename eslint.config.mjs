@@ -20,6 +20,13 @@ const eslintConfig = defineConfig([
       "@stylistic/comma-dangle": ["error", { generics: "ignore" }]
     }
   },
+  {
+    // Procedural SVG art of the game: the markup lives in template literals, wrapping it would not read better
+    files: ["src/client/game/art/**"],
+    rules: {
+      "@stylistic/max-len": "off"
+    }
+  },
   globalIgnores([
     // Default ignores of eslint-config-next
     ".next/**",

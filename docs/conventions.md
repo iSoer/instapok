@@ -11,6 +11,8 @@
 
 Перед завершением работы: `npm run lint+fix`. `next build` в Next 16 линтер не запускает — запускайте его отдельно.
 
+Для `src/client/game/art/**` правило длины строки отключено: там SVG-разметка процедурного арта в шаблонных строках.
+
 ESLint игнорирует `.next/`, `out/`, `build/`, `next-env.d.ts`, `docker/` и собранный `public/sw.js`.
 
 ## Правила React
@@ -28,6 +30,7 @@ ESLint игнорирует `.next/`, `out/`, `build/`, `next-env.d.ts`, `docker
 
 - Браузерный код — в `src/client/`, серверный — в `src/server/`, общий — в `src/shared/`.
 - Изменение API начинается с Zod-схемы в `src/shared/api/schema/`.
+- Игра — в `src/client/game/` (своё чистое ядро `core/` без DOM и React). Её глобальный CSS заскоуплен под `.pawfield`: Next не выгружает глобальные стили при смене маршрута. Правило `memo` для компонентов ленты к экранам игры не относится.
 - Код service worker — только в `src/sw/` (у него свой tsconfig, см. [PWA](pwa.md#изоляция-типов)).
 
 ## Версии инструментов

@@ -20,6 +20,8 @@ export const MAX_WEAKNESSES = 4
 
 export type Skill = typeof SKILLS[number]
 
+export type WeaponSkill = typeof WEAPON_SKILLS[number]
+
 export type Rank = typeof RANKS[number]
 
 export type Aptitude = typeof APTITUDES[number]

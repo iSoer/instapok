@@ -23,10 +23,13 @@
     "character:generate": "tsx src/server/scripts/generateCharacter"
   },
   "dependencies": {
+    "@nanostores/react": "^2.0.1",
     "dotenv": "^18.0.8",
     "drizzle-orm": "^0.45.4",
+    "nanostores": "^1.5.5",
     "next": "^16.4.2",
     "pg": "^8.16.2",
+    "phaser": "^3.90.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.35.5",
@@ -48,6 +51,7 @@
     "esbuild": "~0.28.2",
     "eslint": "^9",
     "eslint-config-next": "^16.4.2",
+    "fast-check": "^4.10.2",
     "jsdom": "^29.1.1",
     "serwist": "^9.5.13",
     "tailwindcss": "^4",

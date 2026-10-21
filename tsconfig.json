@@ -43,6 +43,9 @@
       ],
       "@shared/*": [
         "./src/shared/*"
+      ],
+      "@game/*": [
+        "./src/client/game/*"
       ]
     }
   },

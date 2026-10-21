@@ -16,6 +16,7 @@ Instapoke — лента спрайтов покемонов в стиле Insta
 | [Способности](abilities.md) | Таблица `ability`, связь по имени через `pokemon_info.abilities`, очередь `npm run ability:info`, API `GET /api/pokemon/abilities` |
 | [Модель покемона](pokemon-model.md) | Как связаны BST, профиль статов, типы, способности, рост, вес и опыт; генератор новых покемонов: `npm run pokemon:model`, `npm run pokemon:generate`, `/api/pokemon/generated`, страница `/generate` (ТЗ — [`TZ-pokemon-generator.md`](../TZ-pokemon-generator.md)) |
 | [Модель персонажа](character-model.md) | Персонажи на основе модели покемона: уровни 1–80 с детерминированной прокачкой, редкость 1★–5★ как в Fire Emblem Heroes, навыки оружия с рангами E–S и классы Fire Emblem: Fortune's Weave; `npm run character:generate`, `/api/character/generated`, страница `/characters` |
+| [Игра «Пушистая Резня»](game.md) | Тактика в духе Fire Emblem Heroes про котиков и собачек на маршруте `/game`: бойцы — персонажи модели (редкость, рост до 80, классы FW и их смена), перевод статов модели в боевые, устройство кода, сейв, тесты |
 | [Лента](feed.md) | Виртуализация, бесконечная подгрузка, фильтр по тегам, панель настроек |
 | [PWA](pwa.md) | Манифест, иконки, баннер установки, service worker |
 | [Тесты](testing.md) | Unit- и интеграционные тесты, тестовая БД |

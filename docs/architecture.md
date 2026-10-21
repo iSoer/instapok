@@ -17,6 +17,7 @@ src/
 ├── client/                   # Только браузер
 │   ├── api/                  # SWR-хуки и помощник для URL (не route handlers!)
 │   ├── components/           # React-компоненты
+│   ├── game/                 # Игра «Пушистая Резня» (/game): ядро, контент, nanostores, Phaser, React-UI — см. game.md
 │   └── lib/                  # Виртуализированный список, обёртка tailwind-merge
 ├── server/                   # Только Node
 │   ├── db/                   # Drizzle: schema, relations, connection, queries
@@ -48,6 +49,7 @@ src/
 | `@db` | `src/server/db/index.ts` — экземпляр БД и все таблицы |
 | `@schema/*` | `src/server/db/schema/*` |
 | `@shared/*` | `src/shared/*` |
+| `@game/*` | `src/client/game/*` — игра (см. [Игра](game.md)) |
 
 ## Поток данных
 

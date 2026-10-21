@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Next 16 has breaking changes vs. older Next.js** (from `AGENTS.md`): read the relevant guide in `node_modules/next/dist/docs/` before writing Next-specific code. `next dev` re-adds that block to `AGENTS.md`; leave it.
 
-Longer topic docs (in Russian) live in `docs/` (index: `docs/README.md`): api, database, feed, pwa, testing, conventions, pokemon-info, abilities, pokemon-model (statistical model of stats/types/abilities and the generator built on it), character-model (characters derived from it: level 1-80, rarity 1-5★, Fortune's Weave weapon ranks and classes). `TZ-pokemon-generator.md` in the root is the generator spec (fully implemented, UI is the `/generate` page).
+Longer topic docs (in Russian) live in `docs/` (index: `docs/README.md`): api, database, feed, pwa, testing, conventions, pokemon-info, abilities, pokemon-model (statistical model of stats/types/abilities and the generator built on it), character-model (characters derived from it: level 1-80, rarity 1-5★, Fortune's Weave weapon ranks and classes), game (the `/game` tactics game built on the character model). `TZ-pokemon-generator.md` in the root is the generator spec (fully implemented, UI is the `/generate` page).
 
 ## Commands
 
@@ -65,10 +65,11 @@ npm run icons             # regenerate PWA icons (docs/pwa.md)
 - `src/client/` — browser-only: `components/`, `api/` (SWR hooks + URL helper — **not** the route handlers), `lib/` (virtualized list, tailwind-merge wrapper).
 - `src/server/` — Node-only: Drizzle `db/` (schema, relations, connection) and `scripts/`.
 - `src/shared/` — Zod schemas and the `fetchFn` wrapper imported by both sides.
+- `src/client/game/` — the "Пушистая Резня" tactics game at `/game` (ported from the separate Vite/Preact repo `my-fe`), see "Game" below.
 - `src/sw/sw.ts` — Serwist service worker (own `tsconfig.sw.json`, excluded from the root one). It is bundled and served by
   `src/app/serwist/[path]/route.ts` as `/serwist/sw.js`; registration via `SerwistProvider` in `layout.tsx`. Details: `docs/pwa.md`.
 
-Path aliases (`tsconfig.json`): `@components/*`, `@lib/*`, `@api/*` → `src/client/...`; `@db` → `src/server/db/index.ts` barrel (db instance + every table); `@schema/*` → `src/server/db/schema/*`; `@shared/*`; `@/*` → `src/*`. Remember `@api` is the *client* API layer.
+Path aliases (`tsconfig.json`): `@components/*`, `@lib/*`, `@api/*` → `src/client/...`; `@db` → `src/server/db/index.ts` barrel (db instance + every table); `@schema/*` → `src/server/db/schema/*`; `@shared/*`; `@game/*` → `src/client/game/*`; `@/*` → `src/*`. Remember `@api` is the *client* API layer.
 
 ### The API contract lives in `src/shared/api/schema/`
 
@@ -132,6 +133,15 @@ Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_
 - Stored: own stats at level 1 and 80, aptitudes, current level and class (`generated_character`). `stats` (level + class bonus) and `ranks` are derived (`derivedOf`) and checked by the validator. Divine classes are unique across characters via a partial unique index (409).
 - The generator reuses pokemon generator steps exported from `pokemon-model/generate.ts` with an empty type list (`combineByTypes([])` is 0); changing those steps changes characters too.
 - API `/api/character/generated` mirrors `/api/pokemon/generated` (modes `single` and `custom`) plus `PATCH [id]` for level up / reclass. The `/characters` page reuses the `/generate` budget reducer through `toGeneratorModel` (one "class" per rarity) and adds skills, level and class on top (`characterState.ts`). Docs: `docs/character-model.md`.
+
+### Game (`src/client/game/`, docs: `docs/game.md`)
+
+- A FEH-like tactics game (cats, dogs, mice; Phaser battle scene, React screens, nanostores, hash routes like `/game#/army`). `src/app/game/GameClient.tsx` loads `@game/GameRoot` with `next/dynamic` + `ssr: false` because the game reads `window`/`localStorage`/`location.hash` at import time. Save = `localStorage` key `pawfield:save:local`, schema v3 (zod in `core/save`); v1-v2 saves from the old repo are rejected.
+- Units are character-model characters: `generateUnit` calls `generateCharacter` from `src/server/character-model/` **in the browser** (it is pure; `model.json` ships in the `/game` bundle), so keep that generator free of Node-only imports. The unit stores `rarity`, `aptitudes`, `baseStats`/`maxStats` (model scale), FW `classId`, `weaponSkill` and the themed `weaponKind`; cats/dogs flavour (species, breed, name, trait, appearance) stays.
+- Combat still uses 5 FEH stats: `combatStats` maps model stats in the class through `MODEL_SCALE` (`content/balance.ts`); Atk = Str or Mag by weapon, Mt adds `floor(rank index / 3)`. FW weapon → game weapon in `content/classes.ts` (`weaponKindsFor`): sword/gauntlet → claw, spear → fang, axe → stick, black magic → hiss/howl/growl, white magic → bandage, bow → slingshot (burr for rogue / shadow-seeker), Dancer → purr.
+- Reclass (`reclassUnit`, `reclassAction`) only into classes open at the unit's level; one divine class per army. Enemies come from `loadoutsAt(level)` (class + weapon pairs the model can generate at that level).
+- Game CSS (`ui/styles.css`, `ui/battle.css`) is plain global CSS scoped under the `.pawfield` root class — Next does not unload global CSS between routes, so never add bare `:root`/`body`/element selectors there. `max-len` is off for `src/client/game/art/**` (SVG markup in template literals).
+- Tests: `tests/unit/game/` (`helpers.ts` builds units from keys like `infantry_claw` and pins combat stats by inverting `MODEL_SCALE`).
 
 ## Conventions and gotchas
 
