@@ -7,7 +7,7 @@ import { personalityText } from "@game/content/personalities"
 import { UnitAvatar } from "./UnitAvatar"
 import { MoveBadge, RarityStars, WeaponBadge } from "./Badges"
 import { StatsGrid } from "./Stats"
-import { speciesName } from "../lib/format"
+import { atkLabel, speciesName } from "../lib/format"
 import { aptitudeLine, weaponLine } from "./CharacterPanels"
 
 /** Полная карточка бойца для шторок (ростер, приют, выбор отряда). */
@@ -38,12 +38,12 @@ export function UnitDetails({ unit, compact = false }: { unit: UnitInstance, com
             </span>
           </div>
           <div className="row wrap">
-            <MoveBadge moveType={cls.moveType} />
-            <WeaponBadge kind={cls.weaponKind} />
+            <MoveBadge classId={cls.id} />
+            <WeaponBadge skill={cls.weaponSkill} />
           </div>
         </div>
       </div>
-      <StatsGrid stats={stats} />
+      <StatsGrid stats={stats} atkLabel={atkLabel(unit)} />
       <div className="muted small">
         {weaponLine(unit)}
         {" "}

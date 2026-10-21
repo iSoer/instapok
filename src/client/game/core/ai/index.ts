@@ -1,4 +1,4 @@
-import type { BattleAction, BattleState, BattleUnit, Pos } from "../types"
+import type { BattleAction, BattleState, BattleUnit, Pos, UnitInstance } from "../types"
 import { manhattan, posKey } from "../types"
 import { hashString } from "../rng"
 import { weaponDef } from "@game/content/weapons"
@@ -8,7 +8,12 @@ import { distanceField, reachableTiles, targetsFrom, threatCounts, threatTiles, 
 import { simulateCombat } from "../combat"
 import { visibleStats } from "../units"
 import { difficultyDef } from "@game/content/balance"
-import { unitClass } from "@game/content/classes"
+import { DANCER_CLASS, unitClass } from "@game/content/classes"
+
+/** Лекарь (White Magic) или танцор (Dancer): держатся позади и ценны как цель. */
+function isSupport(unit: UnitInstance): boolean {
+  return unit.weaponSkill === "whiteMagic" || unit.classId === DANCER_CLASS
+}
 
 /** Видимый стат бойца из ростера боя (0, если бойца нет). */
 function rosterStat(state: BattleState, unitId: string, stat: "atk" | "spd"): number {
@@ -60,10 +65,10 @@ function evaluateAttacks(
       const dealt = out.defender.hpBefore - out.defender.hpAfter
       const taken = out.attacker.hpBefore - out.attacker.hpAfter
       const tUnit = state.roster[target.unitId]
-      const tKind = tUnit ? unitClass(tUnit).weaponKind : "claw"
+      const tSupport = !!tUnit && isSupport(tUnit)
       let score = dealt
       if (out.defender.died) score += 100
-      if (tKind === "bandage" || tKind === "purr") score += 15
+      if (tSupport) score += 15
       if (out.attacker.specialTriggered) score += 10
       score -= taken * diff.wTaken
       if (out.attacker.died) score -= 200
@@ -151,7 +156,7 @@ function shouldWake(state: BattleState, bu: BattleUnit): boolean {
 function retreatMove(state: BattleState, bu: BattleUnit, reach: ReachMap, threat: Map<string, number>): Pos {
   const healer = livingUnits(state, bu.side).find((a) => {
     const u = state.roster[a.unitId]
-    return a.unitId !== bu.unitId && u && unitClass(u).weaponKind === "bandage"
+    return a.unitId !== bu.unitId && u && u.weaponSkill === "whiteMagic"
   })
   let best: { pos: Pos, score: number } | null = null
   for (const node of reach.values()) {
@@ -194,7 +199,7 @@ function advanceMove(
     const nearAlly = allies.length === 0 ? 0 : Math.min(...allies.map(a => manhattan(a.pos, node.pos)))
     let score: number
     if (keepDistance) {
-      // Лекарь/Мурлыка: держаться подальше от игрока, но рядом со своими.
+      // Лекарь (White Magic) / Dancer: держаться подальше от игрока, но рядом со своими.
       score = Math.min(d, 4) * 10 - Math.max(0, nearAlly - 2) * 15 - (threat.get(posKey(node.pos)) ?? 0) * 10
     }
     else {
@@ -214,7 +219,8 @@ export function decideAction(state: BattleState, unitId: string): BattleAction {
   const bu = state.units[unitId]
   const unit = state.roster[unitId]
   if (!bu || !unit || !bu.alive) return { type: "endPhase" }
-  const kind = unitClass(unit).weaponKind
+  const healer = unit.weaponSkill === "whiteMagic"
+  const dancer = unit.classId === DANCER_CLASS
   const reach = reachableTiles(state, bu)
   const threat = threatCounts(state, "player")
 
@@ -233,11 +239,11 @@ export function decideAction(state: BattleState, unitId: string): BattleAction {
   }
 
   // Лекарь: лечение приоритетнее
-  if (kind === "bandage") {
+  if (healer) {
     const heal = evaluateHeal(state, bu, reach)
     if (heal) return { ...heal, newStance: "advance" } as BattleAction
   }
-  if (kind === "purr") {
+  if (dancer) {
     const refresh = evaluateRefresh(state, bu, reach)
     if (refresh) return { ...refresh, newStance: "advance" } as BattleAction
   }
@@ -252,6 +258,6 @@ export function decideAction(state: BattleState, unitId: string): BattleAction {
     return { type: "wait", unitId, to, newStance: "advance" }
   }
 
-  const to = advanceMove(state, bu, reach, threat, kind === "bandage" || kind === "purr")
+  const to = advanceMove(state, bu, reach, threat, isSupport(unit))
   return { type: "wait", unitId, to, newStance: "advance" }
 }

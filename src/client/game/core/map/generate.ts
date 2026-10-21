@@ -11,14 +11,16 @@ import type {
   ReinforcementWave,
   Species,
   TerrainId,
-  UnitInstance
+  UnitInstance,
+  WeaponSkill
 } from "../types"
 import { MAP_H, MAP_W, MAX_LEVEL, clamp, inBounds, posKey } from "../types"
 import { isPassable } from "./pathing"
 import { generateUnit, loadoutsAt, type Loadout } from "../units"
 import { BIOMES, biomeDef } from "@game/content/biomes"
 import { DIFFICULTIES, REWARDS, TERRAIN_SHARE, difficultyDef } from "@game/content/balance"
-import { unitClass } from "@game/content/classes"
+import { DANCER_CLASS, unitClass } from "@game/content/classes"
+import { weaponRange } from "@game/content/weapons"
 import { factionDef } from "@game/content/factions"
 
 export interface GenerateMapOptions {
@@ -146,22 +148,24 @@ function validate(g: Grid, playerSpawns: Pos[], enemySpawns: Pos[]): boolean {
   return true
 }
 
-type EnemyRoles = { melee: number, ranged: number, healer: number, purr: number, heavy: number }
+type EnemyRoles = { melee: number, ranged: number, healer: number, dancer: number, heavy: number }
+
+const isMelee = (skill: WeaponSkill): boolean => weaponRange(skill) === 1
 
 /** Комплект врага (класс FW + оружие) из доступных модели на его уровне, с поправками на роли отряда. */
 function pickEnemyLoadout(rng: Rng, level: number, roles: EnemyRoles, difficulty: Difficulty): Loadout {
-  const pool = loadoutsAt(level).filter(l => l.weaponKind !== "purr" || roles.purr === 0)
+  const pool = loadoutsAt(level).filter(l => l.classId !== DANCER_CLASS || roles.dancer === 0)
   const weightOf = (l: Loadout): number => {
     let w = l.weight
-    const k = l.weaponKind
-    if (roles.melee === 0 && ["claw", "fang", "stick"].includes(k)) w *= 4
-    if (roles.ranged === 0 && ["hiss", "howl", "growl", "slingshot", "burr"].includes(k)) w *= 4
-    if (k === "bandage") w = roles.healer > 0 || difficulty === "easy" ? 0 : w
-    if (k === "purr") w = difficulty === "easy" || difficulty === "normal" ? 0 : w
+    const k = l.weaponSkill
+    if (roles.melee === 0 && isMelee(k)) w *= 4
+    if (roles.ranged === 0 && !isMelee(k) && k !== "whiteMagic") w *= 4
+    if (k === "whiteMagic") w = roles.healer > 0 || difficulty === "easy" ? 0 : w
+    if (l.classId === DANCER_CLASS) w = difficulty === "easy" || difficulty === "normal" ? 0 : w
     if (
       (difficulty === "hard" || difficulty === "nightmare")
       && roles.heavy === 0
-      && (l.cls.moveType === "armor" || l.cls.moveType === "cavalry")
+      && (l.cls.moveType === "armored" || l.cls.moveType === "cavalry")
     )
       w *= 3
     return w
@@ -191,7 +195,6 @@ function makeEnemy(
     species,
     classId: loadout.classId,
     weaponSkill: loadout.weaponSkill,
-    weaponKind: loadout.weaponKind,
     isEnemy: true,
     factionId,
     isBoss,
@@ -402,7 +405,7 @@ export function generateMap(opts: GenerateMapOptions): MapDef {
   // Враги
   const erng = root.fork("enemies")
   const factionId = biome.factionId
-  const roles = { melee: 0, ranged: 0, healer: 0, purr: 0, heavy: 0 }
+  const roles = { melee: 0, ranged: 0, healer: 0, dancer: 0, heavy: 0 }
   const colorCount: Record<string, number> = {}
   const enemies: EnemyPlacement[] = []
   const bossIndex = diff.boss ? 0 : -1
@@ -413,15 +416,15 @@ export function generateMap(opts: GenerateMapOptions): MapDef {
   const loadoutFor = (i: number, level: number): Loadout => {
     let loadout = pickEnemyLoadout(erng, level, roles, opts.difficulty)
     // не более 60 % одного оружия
-    if ((colorCount[loadout.weaponKind] ?? 0) + 1 > Math.ceil(enemyCount * 0.6) && i > 0)
+    if ((colorCount[loadout.weaponSkill] ?? 0) + 1 > Math.ceil(enemyCount * 0.6) && i > 0)
       loadout = pickEnemyLoadout(erng, level, roles, opts.difficulty)
-    const k = loadout.weaponKind
+    const k = loadout.weaponSkill
     colorCount[k] = (colorCount[k] ?? 0) + 1
-    if (["claw", "fang", "stick"].includes(k)) roles.melee++
-    if (["hiss", "howl", "growl", "slingshot", "burr"].includes(k)) roles.ranged++
-    if (k === "bandage") roles.healer++
-    if (k === "purr") roles.purr++
-    if (loadout.cls.moveType === "armor" || loadout.cls.moveType === "cavalry") roles.heavy++
+    if (isMelee(k)) roles.melee++
+    else if (k !== "whiteMagic") roles.ranged++
+    if (k === "whiteMagic") roles.healer++
+    if (loadout.classId === DANCER_CLASS) roles.dancer++
+    if (loadout.cls.moveType === "armored" || loadout.cls.moveType === "cavalry") roles.heavy++
     return loadout
   }
 
@@ -430,8 +433,8 @@ export function generateMap(opts: GenerateMapOptions): MapDef {
     return { level, loadout: loadoutFor(i, level) }
   })
   // Расстановка: ближники/броня — ближе к игроку, дальники/лекари — дальше
-  const isMelee = (p: { loadout: Loadout }): boolean => ["claw", "fang", "stick", "purr"].includes(p.loadout.weaponKind)
-  const ordered = [...picks.filter(isMelee), ...picks.filter(p => !isMelee(p))]
+  const isMeleePick = (p: { loadout: Loadout }): boolean => isMelee(p.loadout.weaponSkill)
+  const ordered = [...picks.filter(isMeleePick), ...picks.filter(p => !isMeleePick(p))]
   const holdCount = Math.round(enemyCount * diff.holdRatio)
   ordered.forEach(({ level, loadout }, i) => {
     const pos = sortedSpawns[i]
@@ -467,7 +470,7 @@ export function generateMap(opts: GenerateMapOptions): MapDef {
       const loadout = pickEnemyLoadout(
         rrng,
         level,
-        { melee: 1, ranged: 1, healer: 1, purr: 1, heavy: 0 },
+        { melee: 1, ranged: 1, healer: 1, dancer: 1, heavy: 0 },
         opts.difficulty
       )
       if (!isPassable(get(tiles, pos), loadout.cls.moveType)) set(tiles, pos, "plain")

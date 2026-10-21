@@ -1,6 +1,6 @@
 import type { Rng } from "../rng"
 import { createRng, makeId } from "../rng"
-import type { Appearance, Gender, Rarity, Species, Stats, UnitInstance, UnitSkills, WeaponKind } from "../types"
+import type { Appearance, Gender, Rarity, Species, Stats, UnitInstance, UnitSkills } from "../types"
 import { MAX_LEVEL, STATS, addStats, clamp } from "../types"
 import type { ClassDef, PassiveDef, WeaponDef } from "../skills/types"
 import { permanentBonus, unitKit, invalidateKit } from "../skills/engine"
@@ -10,10 +10,9 @@ import {
   classWeapons,
   className,
   fwClass,
-  unitClass,
-  weaponKindsFor
+  unitClass
 } from "@game/content/classes"
-import { basicWeaponId, weaponDef, weaponsForKind } from "@game/content/weapons"
+import { basicWeaponId, isMagicWeapon, weaponDef, weaponsForSkill } from "@game/content/weapons"
 import { SPECIALS } from "@game/content/skills/specials"
 import { ASSISTS } from "@game/content/skills/assists"
 import { PASSIVES } from "@game/content/skills/passives"
@@ -34,18 +33,11 @@ import { rankAtLevel, rankIndex, ranksAtLevel, type Rank, type WeaponSkill } fro
 
 const RARITY_SKILL_POOL: Record<Rarity, number> = { 1: 3, 2: 3, 3: 4, 4: 4, 5: 5 }
 
-const MAGIC_KINDS: readonly WeaponKind[] = ["hiss", "howl", "growl", "bandage"]
-
-/** Бьёт ли оружие «магией»: тогда атака идёт от Mag, а не от Str. */
-export function isMagicKind(kind: WeaponKind): boolean {
-  return MAGIC_KINDS.includes(kind)
-}
-
 const scaleStat = (v: number): number => Math.max(0, Math.round((v - MODEL_SCALE.statOffset) * MODEL_SCALE.statMul))
 
 /**
  * Боевые статы FEH из статов модели (`MODEL_SCALE`). Atk — Str (`attack`) для физического оружия
- * и Mag (`specialAttack`) для магии и Бинта; второй атакующий стат в бою не участвует.
+ * и Mag (`specialAttack`) для Black Magic и White Magic; второй атакующий стат в бою не участвует.
  */
 export function combatStats(model: StatValues, magical: boolean): Stats {
   return {
@@ -64,7 +56,7 @@ export function modelStatsAt(unit: UnitInstance, level: number): StatValues {
 
 /** Боевые статы уровня `level` без оружия и навыков. */
 export function statsAtLevel(unit: UnitInstance, level: number): Stats {
-  return combatStats(modelStatsAt(unit, level), isMagicKind(unit.weaponKind))
+  return combatStats(modelStatsAt(unit, level), isMagicWeapon(unit.weaponSkill))
 }
 
 /** Прирост боевых статов между уровнями. */
@@ -163,20 +155,8 @@ function bestWeapon(
   return pick(weapons.filter(w => rankIndex(ranks[w]) === top))
 }
 
-/** Звериное оружие для навыка: прежнее, если подходит, иначе по seed бойца (цвет чёрной магии стабилен). */
-function kindFor(classId: string, skill: WeaponSkill, seed: number, current?: WeaponKind): WeaponKind {
-  const kinds = weaponKindsFor(classId, skill)
-  if (current && kinds.includes(current)) return current
-  return kinds[seed % kinds.length] as WeaponKind
-}
-
-/** Каким звериным оружием боец будет сражаться после `reclassUnit(unit, classId, skill)`. */
-export function kindAfterReclass(unit: UnitInstance, classId: string, skill: WeaponSkill): WeaponKind {
-  return kindFor(classId, skill, unit.seed, unit.weaponKind)
-}
-
-/** Поддержка, которую класс получает вместе с оружием: Бинт лечит, Мурлыка «освежает». */
-function withClassAssist(unit: UnitInstance, prevKind: WeaponKind): UnitInstance {
+/** Поддержка, которую боец получает вместе с классом и оружием: White Magic лечит, Dancer танцует. */
+function withClassAssist(unit: UnitInstance, prev: UnitInstance): UnitInstance {
   const skills = { ...unit.skills }
   const learned = [...unit.learned]
   const grant = (id: string) => {
@@ -186,17 +166,17 @@ function withClassAssist(unit: UnitInstance, prevKind: WeaponKind): UnitInstance
   const assist = skills.assist ? ASSISTS.find(a => a.id === skills.assist) : undefined
   if (
     assist
-    && ((assist.staffOnly && unit.weaponKind !== "bandage") || (assist.purrOnly && unit.weaponKind !== "purr"))
+    && ((assist.staffOnly && unit.weaponSkill !== "whiteMagic") || (assist.dancerOnly && unit.classId !== DANCER_CLASS))
   )
     delete skills.assist
-  if (unit.weaponKind === "purr") grant("as_purr")
-  else if (unit.weaponKind === "bandage" && (prevKind !== "bandage" || !skills.assist)) grant("as_heal")
+  if (unit.classId === DANCER_CLASS) grant("as_dance")
+  else if (unit.weaponSkill === "whiteMagic" && (prev.weaponSkill !== "whiteMagic" || !skills.assist)) grant("as_heal")
   return { ...unit, skills, learned }
 }
 
 /**
  * Сменить класс (как в FW — бесплатно, если класс открыт на уровне). Навык оружия — `weaponSkill`,
- * если класс им сражается, иначе прежний или лучший по рангу. Смена звериного оружия сбрасывает его на базовое.
+ * если класс им сражается, иначе прежний или лучший по рангу. Смена оружия сбрасывает экипированное на базовое.
  */
 export function reclassUnit(unit: UnitInstance, classId: string, weaponSkill?: WeaponSkill): UnitInstance {
   if (!canTakeClassNow(unit, classId)) throw new Error(`class ${classId} is not open at level ${unit.level}`)
@@ -207,11 +187,10 @@ export function reclassUnit(unit: UnitInstance, classId: string, weaponSkill?: W
       : weapons.includes(unit.weaponSkill)
         ? unit.weaponSkill
         : bestWeapon(classId, unit, best => best[0] as WeaponSkill)
-  const kind = kindFor(classId, skill, unit.seed, unit.weaponKind)
-  const next: UnitInstance = { ...unit, classId, weaponSkill: skill, weaponKind: kind }
-  if (kind !== unit.weaponKind) next.skills = { ...unit.skills, weapon: basicWeaponId(kind) }
+  const next: UnitInstance = { ...unit, classId, weaponSkill: skill }
+  if (skill !== unit.weaponSkill) next.skills = { ...unit.skills, weapon: basicWeaponId(skill) }
   invalidateKit(unit)
-  return withClassAssist(next, unit.weaponKind)
+  return withClassAssist(next, unit)
 }
 
 /* ---------- Пулы навыков ---------- */
@@ -219,16 +198,15 @@ export function reclassUnit(unit: UnitInstance, classId: string, weaponSkill?: W
 function passiveAllowed(p: PassiveDef, cls: ClassDef): boolean {
   if (!p.allow) return true
   if (p.allow.moveTypes && !p.allow.moveTypes.includes(cls.moveType)) return false
-  if (p.allow.weaponKinds && !p.allow.weaponKinds.includes(cls.weaponKind)) return false
-  if (p.allow.notWeaponKinds && p.allow.notWeaponKinds.includes(cls.weaponKind)) return false
+  if (p.allow.weaponSkills && !p.allow.weaponSkills.includes(cls.weaponSkill)) return false
   return true
 }
 
 /** Все навыки, которые класс/вид в принципе может изучить (без v1.1). */
 export function allowedSkillIds(cls: ClassDef, species: Species): string[] {
   const out: string[] = []
-  const isStaff = cls.weaponKind === "bandage"
-  const isPurr = cls.weaponKind === "purr"
+  const isStaff = cls.weaponSkill === "whiteMagic"
+  const isDancer = cls.id === DANCER_CLASS
   for (const s of SPECIALS) {
     if (s.stage === "v1.1") continue
     if (s.onlySpecies && s.onlySpecies !== species) continue
@@ -238,8 +216,8 @@ export function allowedSkillIds(cls: ClassDef, species: Species): string[] {
   for (const a of ASSISTS) {
     if (a.stage === "v1.1") continue
     if (a.staffOnly && !isStaff) continue
-    if (a.purrOnly && !isPurr) continue
-    if (isPurr && a.kind === "refresh") continue // Мурлыканье выдаётся автоматически
+    if (a.dancerOnly && !isDancer) continue
+    if (isDancer && a.kind === "refresh") continue // танец выдаётся автоматически
     out.push(a.id)
   }
   for (const p of PASSIVES) {
@@ -247,7 +225,7 @@ export function allowedSkillIds(cls: ClassDef, species: Species): string[] {
     if (!passiveAllowed(p, cls)) continue
     out.push(p.id)
   }
-  for (const w of weaponsForKind(cls.weaponKind)) if (w.variant !== "basic") out.push(w.id)
+  for (const w of weaponsForSkill(cls.weaponSkill)) if (w.variant !== "basic") out.push(w.id)
   return out
 }
 
@@ -295,8 +273,6 @@ export interface GenerateUnitOptions {
   classId?: string
   /** Желаемый навык оружия, если класс им сражается. */
   weaponSkill?: WeaponSkill
-  /** Желаемое звериное оружие (цвет чёрной магии). */
-  weaponKind?: WeaponKind
   isEnemy?: boolean
   factionId?: string
   isBoss?: boolean
@@ -365,25 +341,23 @@ export function generateUnit(opts: GenerateUnitOptions): UnitInstance {
   const character = generateCharacter(loadCharacterModel(), request, r.character.int(0, 0x7fffffff))
   const classId = character.class
   const weaponSkill = bestWeapon(classId, character, best => r.weapon.pick(best), opts.weaponSkill)
-  const kinds = weaponKindsFor(classId, weaponSkill)
-  const weaponKind = opts.weaponKind && kinds.includes(opts.weaponKind) ? opts.weaponKind : r.weapon.pick(kinds)
-  const cls = unitClass({ classId, weaponKind })
+  const cls = unitClass({ classId, weaponSkill })
 
   // Навыки
-  const skills: UnitSkills = { weapon: basicWeaponId(weaponKind) }
+  const skills: UnitSkills = { weapon: basicWeaponId(weaponSkill) }
   const learned: string[] = []
   const allowed = allowedSkillIds(cls, species)
   const specials = allowed.filter(id => SPECIALS.some(s => s.id === id))
   const assists = allowed.filter(id => ASSISTS.some(a => a.id === id && !a.staffOnly))
   const passives = allowed.filter(id => PASSIVES.some(p => p.id === id))
 
-  if (weaponKind === "bandage") {
+  if (weaponSkill === "whiteMagic") {
     skills.assist = "as_heal"
     learned.push("as_heal")
   }
-  if (weaponKind === "purr") {
-    skills.assist = "as_purr"
-    learned.push("as_purr")
+  if (classId === DANCER_CLASS) {
+    skills.assist = "as_dance"
+    learned.push("as_dance")
   }
   if (specials.length > 0) {
     const sp = r.skills.pick(specials)
@@ -416,9 +390,7 @@ export function generateUnit(opts: GenerateUnitOptions): UnitInstance {
   let traitId: string | undefined
   const withTrait = opts.withTrait ?? !opts.isEnemy
   if (withTrait || opts.isBoss) {
-    const traits = TRAITS.filter(
-      t => (!t.onlySpecies || t.onlySpecies === species) && !(t.notWeaponKinds ?? []).includes(weaponKind)
-    )
+    const traits = TRAITS.filter(t => !t.onlySpecies || t.onlySpecies === species)
     traitId = r.trait.weighted(traits.map(t => ({ item: t.id, w: t.rare ? 1 : 4 })))
   }
 
@@ -436,7 +408,6 @@ export function generateUnit(opts: GenerateUnitOptions): UnitInstance {
     personalityId: personality.id,
     classId,
     weaponSkill,
-    weaponKind,
     rarity,
     level,
     xp: 0,
@@ -463,11 +434,10 @@ export function generateUnit(opts: GenerateUnitOptions): UnitInstance {
 
 /* ---------- Комплекты: класс FW + оружие ---------- */
 
-/** Класс FW, навык оружия и звериное оружие — всё, что нужно, чтобы заказать бойца нужной роли. */
+/** Класс модели и оружейный навык — всё, что нужно, чтобы заказать бойца нужной роли. */
 export interface Loadout {
   classId: string
   weaponSkill: WeaponSkill
-  weaponKind: WeaponKind
   cls: ClassDef
   /** Вес при случайном выборе: (ярус + 1)², поделённый между комплектами класса. */
   weight: number
@@ -485,16 +455,14 @@ export function loadoutsAt(level: number): Loadout[] {
   for (const classId of CLASS_IDS) {
     if (isUniqueClassId(classId)) continue
     if (validateCharacterRequest(model, { class: classId, level: lvl }).length > 0) continue
-    const pairs = classWeapons(classId).flatMap(weaponSkill =>
-      weaponKindsFor(classId, weaponSkill).map(weaponKind => ({ weaponSkill, weaponKind }))
-    )
+    const weapons = classWeapons(classId)
     const tier = CLASS_TIERS.indexOf(fwClass(classId).tier)
-    for (const p of pairs)
+    for (const weaponSkill of weapons)
       out.push({
         classId,
-        ...p,
-        cls: unitClass({ classId, weaponKind: p.weaponKind }),
-        weight: (tier + 1) ** 2 / pairs.length
+        weaponSkill,
+        cls: unitClass({ classId, weaponSkill }),
+        weight: (tier + 1) ** 2 / weapons.length
       })
   }
   loadoutCache.set(lvl, out)
@@ -510,20 +478,20 @@ export interface RosterOptions {
   now?: number
 }
 
-const kindOf = (u: UnitInstance): WeaponKind => u.weaponKind
+const MELEE: readonly WeaponSkill[] = ["sword", "spear", "axe", "gauntlet"]
 
 /** Запасной состав ростера на начальном ярусе, если случайный не прошёл проверку ролей. */
-const FALLBACK_ROSTER: readonly [string, WeaponSkill, WeaponKind][] = [
-  ["diviner", "whiteMagic", "bandage"],
-  ["gladiator", "sword", "claw"],
-  ["soldier", "spear", "fang"],
-  ["soldier", "axe", "stick"],
-  ["hunter", "bow", "slingshot"],
-  ["diviner", "blackMagic", "howl"],
-  ["noble", "sword", "claw"],
-  ["commoner", "axe", "stick"],
-  ["diviner", "blackMagic", "hiss"],
-  ["hunter", "sword", "claw"]
+const FALLBACK_ROSTER: readonly [string, WeaponSkill][] = [
+  ["diviner", "whiteMagic"],
+  ["gladiator", "sword"],
+  ["soldier", "spear"],
+  ["soldier", "axe"],
+  ["hunter", "bow"],
+  ["diviner", "blackMagic"],
+  ["noble", "sword"],
+  ["gladiator", "gauntlet"],
+  ["commoner", "axe"],
+  ["hunter", "sword"]
 ]
 
 /** Ростер с гарантиями SPEC 5.3. Детерминирован по seed. Классы — из модели на стартовом уровне. */
@@ -540,8 +508,8 @@ export function generateRoster(opts: RosterOptions): UnitInstance[] {
     for (let i = 0; i < size; i++) {
       const seed = rng.int(0, 0x7fffffff)
       let u = generateUnit({ seed, level: startLevel, rarityWeights: tier.rarityWeights, now: opts.now })
-      // Мурлыка в ростере — не больше одного
-      if (u.weaponKind === "purr" && units.some(x => x.weaponKind === "purr"))
+      // Dancer в ростере — не больше одного
+      if (u.classId === DANCER_CLASS && units.some(x => x.classId === DANCER_CLASS))
         u = generateUnit({
           seed,
           level: startLevel,
@@ -560,31 +528,30 @@ export function generateRoster(opts: RosterOptions): UnitInstance[] {
         rarity: 5,
         classId: old.classId,
         weaponSkill: old.weaponSkill,
-        weaponKind: old.weaponKind,
         now: opts.now
       })
     }
-    const has = (kinds: WeaponKind[]) => units.some(u => kinds.includes(kindOf(u)))
+    const has = (skills: WeaponSkill[]) => units.some(u => skills.includes(u.weaponSkill))
+    // Лекарь, двое ближников, дальник и все три цвета треугольника
     const ok
-      = has(["bandage"])
-        && units.filter(u => ["claw", "fang", "stick"].includes(kindOf(u))).length >= 2
-        && has(["hiss", "howl", "growl", "slingshot", "burr"])
-        && has(["claw", "hiss"])
-        && has(["fang", "howl"])
-        && has(["stick", "growl"])
+      = has(["whiteMagic"])
+        && units.filter(u => MELEE.includes(u.weaponSkill)).length >= 2
+        && has(["bow", "blackMagic"])
+        && has(["sword"])
+        && has(["spear"])
+        && has(["axe"])
         && units.some(u => u.species === "cat")
         && units.some(u => u.species === "dog")
     if (ok) return units
   }
   // Фолбэк: собрать вручную
   const rng = root.fork("fallback")
-  return FALLBACK_ROSTER.slice(0, size).map(([classId, weaponSkill, weaponKind], i) =>
+  return FALLBACK_ROSTER.slice(0, size).map(([classId, weaponSkill], i) =>
     generateUnit({
       seed: rng.int(0, 0x7fffffff),
       level: startLevel,
       classId: startLevel >= 5 ? classId : "commoner",
       weaponSkill,
-      weaponKind,
       rarityWeights: tier.rarityWeights,
       species: i % 2 === 0 ? "cat" : "dog",
       now: opts.now
@@ -616,9 +583,9 @@ export function learnSkill(unit: UnitInstance, skillId: string): UnitInstance {
 
 export function equipSkill(unit: UnitInstance, skillId: string | undefined, slot: keyof UnitSkills): UnitInstance {
   if (slot === "weapon" && !skillId) throw new Error("weapon required")
-  if (skillId && slot === "weapon" && weaponDef(skillId).kind !== unit.weaponKind)
-    throw new Error("weapon of another kind")
-  if (skillId && !unit.learned.includes(skillId) && !(slot === "weapon" && skillId === basicWeaponId(unit.weaponKind)))
+  if (skillId && slot === "weapon" && weaponDef(skillId).kind !== unit.weaponSkill)
+    throw new Error("weapon of another skill")
+  if (skillId && !unit.learned.includes(skillId) && !(slot === "weapon" && skillId === basicWeaponId(unit.weaponSkill)))
     throw new Error("skill not learned")
   const skills = { ...unit.skills }
   if (skillId) skills[slot] = skillId as string

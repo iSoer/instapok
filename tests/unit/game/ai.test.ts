@@ -8,8 +8,8 @@ const flat = { hp: 20, atk: 10, spd: 5, def: 5, res: 5 }
 describe("ИИ врага", () => {
   it("hold стоит на месте, пока игрок вне зоны угрозы", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 }, stance: "hold" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 }, stance: "hold" }]
     )
     const s = applyAction(b.state, { type: "endPhase" }).state
     const a = decideAction(s, b.enemies[0]!.id)
@@ -18,8 +18,8 @@ describe("ИИ врага", () => {
 
   it("advance идёт к игроку, если не может атаковать", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 }, stance: "advance" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 }, stance: "advance" }]
     )
     const s = applyAction(b.state, { type: "endPhase" }).state
     const a = decideAction(s, b.enemies[0]!.id)
@@ -30,10 +30,10 @@ describe("ИИ врага", () => {
   it("атакует, когда может убить, и выбирает убийство", () => {
     const b = makeBattle(
       [
-        { classId: "infantry_claw", pos: { x: 1, y: 4 }, baseStats: { ...flat, hp: 50 } },
-        { classId: "infantry_claw", pos: { x: 3, y: 4 }, baseStats: { ...flat, hp: 12, def: 0 } }
+        { classId: "infantry_sword", pos: { x: 1, y: 4 }, baseStats: { ...flat, hp: 50 } },
+        { classId: "infantry_sword", pos: { x: 3, y: 4 }, baseStats: { ...flat, hp: 12, def: 0 } }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 2 }, baseStats: { ...flat, atk: 12 }, stance: "advance" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 2 }, baseStats: { ...flat, atk: 12 }, stance: "advance" }]
     )
     const s = applyAction(b.state, { type: "endPhase" }).state
     const a = decideAction(s, b.enemies[0]!.id)
@@ -43,10 +43,10 @@ describe("ИИ врага", () => {
 
   it("детерминирован и порядок хода стабилен", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
       [
-        { classId: "infantry_claw", pos: { x: 2, y: 0 } },
-        { classId: "infantry_claw", pos: { x: 2, y: 3 } }
+        { classId: "infantry_sword", pos: { x: 2, y: 0 } },
+        { classId: "infantry_sword", pos: { x: 2, y: 3 } }
       ]
     )
     const s = applyAction(b.state, { type: "endPhase" }).state
@@ -56,10 +56,10 @@ describe("ИИ врага", () => {
 
   it("hold просыпается от «шума боя» рядом и по таймеру хода", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
       [
-        { classId: "infantry_claw", pos: { x: 2, y: 0 }, stance: "hold" },
-        { classId: "infantry_claw", pos: { x: 3, y: 0 }, stance: "hold", baseStats: { ...flat, hp: 30 } }
+        { classId: "infantry_sword", pos: { x: 2, y: 0 }, stance: "hold" },
+        { classId: "infantry_sword", pos: { x: 3, y: 0 }, stance: "hold", baseStats: { ...flat, hp: 30 } }
       ]
     )
     let s = applyAction(b.state, { type: "endPhase" }).state
@@ -70,8 +70,8 @@ describe("ИИ врага", () => {
     if (a.type === "wait") expect(a.to.y).toBeGreaterThan(0)
     // таймер: на нормальной сложности с 4-го хода все идут в атаку
     const b2 = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 }, stance: "hold" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 }, stance: "hold" }]
     )
     s = applyAction(b2.state, { type: "endPhase" }).state
     s = { ...s, turn: 4 }
@@ -81,8 +81,8 @@ describe("ИИ врага", () => {
 
   it("раненый враг отступает, если не может убить", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, hp: 60, def: 30 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 2 }, baseStats: { ...flat, hp: 40 }, stance: "advance" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, hp: 60, def: 30 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 2 }, baseStats: { ...flat, hp: 40 }, stance: "advance" }],
       { difficulty: "hard" }
     )
     const s = applyAction(b.state, { type: "endPhase" }).state
@@ -94,10 +94,10 @@ describe("ИИ врага", () => {
 
   it("лекарь лечит раненого союзника", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
       [
-        { classId: "infantry_bandage", pos: { x: 2, y: 0 } },
-        { classId: "infantry_claw", pos: { x: 3, y: 0 }, baseStats: { ...flat, hp: 30 } }
+        { classId: "infantry_whiteMagic", pos: { x: 2, y: 0 } },
+        { classId: "infantry_sword", pos: { x: 3, y: 0 }, baseStats: { ...flat, hp: 30 } }
       ]
     )
     const s = applyAction(b.state, { type: "endPhase" }).state

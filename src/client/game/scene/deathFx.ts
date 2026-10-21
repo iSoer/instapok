@@ -1,5 +1,6 @@
 import Phaser from "phaser"
-import type { MoveType, Side, UnitInstance, WeaponKind } from "@game/core/types"
+import type { MoveType, Side, UnitInstance } from "@game/core/types"
+import type { ArtWeapon } from "@game/art/index"
 import { CRITTER_PART_ANCHORS, type CritterPart } from "@game/art/index"
 import { FUR_PALETTES } from "@game/content/appearance"
 import { TEX } from "./textures"
@@ -54,7 +55,7 @@ const BASE_WEIGHTS: Record<DeathVariant, number> = {
 }
 
 /** Уклон по оружию убийцы (добавка к базовому весу). */
-const WEAPON_BIAS: Record<WeaponKind, Partial<Record<DeathVariant, number>>> = {
+const WEAPON_BIAS: Record<ArtWeapon, Partial<Record<DeathVariant, number>>> = {
   claw: { gibs: 4, launch: 2, ragdoll: 2 },
   fang: { gibs: 5, ragdoll: 2, launch: 1 },
   stick: { launch: 4, flatten: 4, ragdoll: 3 },
@@ -69,7 +70,7 @@ const WEAPON_BIAS: Record<WeaponKind, Partial<Record<DeathVariant, number>>> = {
 
 const MOVE_BIAS: Record<MoveType, Partial<Record<DeathVariant, number>>> = {
   infantry: {},
-  armor: { crumble: 2, flatten: 1 },
+  armored: { crumble: 2, flatten: 1 },
   cavalry: { launch: 1, ragdoll: 1 },
   flier: { launch: 2, dissolve: 1 }
 }
@@ -95,7 +96,7 @@ function readOverride(): DeathVariant | null {
   return typeof v === "string" && (DEATH_VARIANTS as readonly string[]).includes(v) ? (v as DeathVariant) : null
 }
 
-export function pickDeathVariant(seed: number, killerKind: WeaponKind | undefined, moveType: MoveType): DeathVariant {
+export function pickDeathVariant(seed: number, killerKind: ArtWeapon | undefined, moveType: MoveType): DeathVariant {
   const forced = readOverride()
   if (forced) return forced
   const weights: Record<DeathVariant, number> = { ...BASE_WEIGHTS }
@@ -155,7 +156,7 @@ export interface DeathCtx {
   side: Side
   /** Вызвать, когда пора положить лужу (каждый вариант — в свой момент). */
   onPool?: () => void
-  killerKind?: WeaponKind
+  killerKind?: ArtWeapon
 }
 
 type Mode = "cine" | "map"

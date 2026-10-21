@@ -1,143 +1,96 @@
 import type { WeaponDef, WeaponVariant } from "@game/core/skills/types"
-import type { Color, WeaponKind } from "@game/core/types"
+import type { Color } from "@game/core/types"
+import { CHARACTER_STAT_LABELS } from "@shared/character/leveling"
+import { SKILL_LABELS, WEAPON_SKILLS, type WeaponSkill } from "@shared/character/skills"
 
-export const KIND_COLOR: Record<WeaponKind, Color> = {
-  claw: "red",
-  fang: "blue",
-  stick: "green",
-  hiss: "red",
-  howl: "blue",
-  growl: "green",
-  slingshot: "colorless",
-  burr: "colorless",
-  bandage: "colorless",
-  purr: "colorless"
+// Оружие игры — оружейные навыки модели персонажа (`WEAPON_SKILLS`), названия — `SKILL_LABELS`.
+// Цвет треугольника, дальность, Mt и разновидности — боевые правила игры поверх модели.
+
+/** Треугольник FEH: Sword бьёт Axe, Axe бьёт Spear, Spear бьёт Sword; остальное бесцветное. */
+export const WEAPON_COLOR: Record<WeaponSkill, Color> = {
+  sword: "red",
+  spear: "blue",
+  axe: "green",
+  gauntlet: "colorless",
+  bow: "colorless",
+  blackMagic: "colorless",
+  whiteMagic: "colorless"
 }
 
-interface KindSpec {
+interface WeaponSpec {
   range: 1 | 2
   mt: number
+  /** Бьёт по Res, атака от Mag. */
   magical: boolean
+  /** Посох: урон ×0.5, лечит через Поддержку. */
   isStaff: boolean
-  variants: Partial<Record<WeaponVariant, string>>
+  variants: readonly WeaponVariant[]
   effectiveAgainst?: WeaponDef["effectiveAgainst"]
-  debuffAfterCombat?: WeaponDef["debuffAfterCombat"]
   desc: string
 }
 
-const KIND_SPECS: Record<WeaponKind, KindSpec> = {
-  claw: {
+const MELEE_VARIANTS: readonly WeaponVariant[] = ["basic", "brave", "killer", "armorslayer", "cavslayer"]
+
+const SPECS: Record<WeaponSkill, WeaponSpec> = {
+  sword: { range: 1, mt: 6, magical: false, isStaff: false, variants: MELEE_VARIANTS, desc: "Ближний бой, красный." },
+  spear: { range: 1, mt: 6, magical: false, isStaff: false, variants: MELEE_VARIANTS, desc: "Ближний бой, синий." },
+  axe: { range: 1, mt: 6, magical: false, isStaff: false, variants: MELEE_VARIANTS, desc: "Ближний бой, зелёный." },
+  gauntlet: {
     range: 1,
-    mt: 6,
+    mt: 5,
     magical: false,
     isStaff: false,
-    variants: {
-      basic: "Коготь",
-      brave: "Двойной коготь",
-      killer: "Хищный коготь",
-      armorslayer: "Коготь-коробкорез",
-      cavslayer: "Коготь-антипылесос"
-    },
-    desc: "Ближний бой, красный."
+    variants: ["basic", "brave", "killer"],
+    desc: "Ближний бой, бесцветный."
   },
-  fang: {
-    range: 1,
-    mt: 6,
-    magical: false,
-    isStaff: false,
-    variants: {
-      basic: "Клык",
-      brave: "Двойной клык",
-      killer: "Хищный клык",
-      armorslayer: "Клык-коробкорез",
-      cavslayer: "Клык-антипылесос"
-    },
-    desc: "Ближний бой, синий."
-  },
-  stick: {
-    range: 1,
-    mt: 6,
-    magical: false,
-    isStaff: false,
-    variants: {
-      basic: "Палка",
-      brave: "Двойная палка",
-      killer: "Хищная палка",
-      armorslayer: "Палка-коробкорез",
-      cavslayer: "Палка-антипылесос"
-    },
-    desc: "Ближний бой, зелёный. Собачья классика."
-  },
-  hiss: {
-    range: 2,
-    mt: 5,
-    magical: true,
-    isStaff: false,
-    variants: { basic: "Шипение", killer: "Злое шипение" },
-    desc: "Красная «магия», бьёт по Res с 2 клеток."
-  },
-  howl: {
-    range: 2,
-    mt: 5,
-    magical: true,
-    isStaff: false,
-    variants: { basic: "Вой", killer: "Тоскливый вой" },
-    desc: "Синяя «магия», бьёт по Res с 2 клеток."
-  },
-  growl: {
-    range: 2,
-    mt: 5,
-    magical: true,
-    isStaff: false,
-    variants: { basic: "Рык", killer: "Утробный рык" },
-    desc: "Зелёная «магия», бьёт по Res с 2 клеток."
-  },
-  slingshot: {
+  bow: {
     range: 2,
     mt: 5,
     magical: false,
     isStaff: false,
-    variants: { basic: "Рогатка", brave: "Двойная рогатка", killer: "Снайперская рогатка" },
+    variants: ["basic", "brave", "killer"],
     effectiveAgainst: ["flier"],
-    desc: "Дальний бой. Эффективна против летунов — лопает шарики."
+    desc: "Дальний бой, бесцветный. Эффективен против flier."
   },
-  burr: {
+  blackMagic: {
     range: 2,
-    mt: 4,
-    magical: false,
+    mt: 5,
+    magical: true,
     isStaff: false,
-    variants: { basic: "Репейник", killer: "Колючий репейник" },
-    debuffAfterCombat: { def: -5, res: -5 },
-    desc: "Дальний бой. После боя цель и враги рядом с ней получают −5 Def/Res."
+    variants: ["basic", "killer"],
+    desc: `Магия с 2 клеток: атака от ${CHARACTER_STAT_LABELS.specialAttack}, бьёт по ${CHARACTER_STAT_LABELS.specialDefense}.`
   },
-  bandage: {
+  whiteMagic: {
     range: 2,
     mt: 4,
     magical: true,
-    isStaff: false,
-    variants: { basic: "Бинт", killer: "Жгут" },
-    desc: "Лекарское. Урон ×0.5, лечит через Поддержку."
-  },
-  purr: {
-    range: 1,
-    mt: 4,
-    magical: false,
-    isStaff: false,
-    variants: { basic: "Коготок" },
-    desc: "Коготок Мурлыки. Слабый, но свой."
+    isStaff: true,
+    variants: ["basic", "killer"],
+    desc: "Лечит через Поддержку. Урон ×0.5."
   }
 }
-KIND_SPECS.bandage.isStaff = true
+
+/** Название разновидности: базовое оружие — название навыка модели, остальные — с приставкой. */
+const VARIANT_PREFIX: Record<WeaponVariant, string> = {
+  basic: "",
+  brave: "Brave ",
+  killer: "Killer ",
+  armorslayer: "Armorslayer ",
+  cavslayer: "Horseslayer "
+}
+
+const SPD = CHARACTER_STAT_LABELS.speed
 
 function build(): WeaponDef[] {
   const out: WeaponDef[] = []
-  for (const [kind, spec] of Object.entries(KIND_SPECS) as [WeaponKind, KindSpec][]) {
-    for (const [variant, name] of Object.entries(spec.variants) as [WeaponVariant, string][]) {
+  for (const skill of WEAPON_SKILLS) {
+    const spec = SPECS[skill]
+    for (const variant of spec.variants) {
       const w: WeaponDef = {
-        id: `${kind}_${variant}`,
-        name,
-        kind,
-        color: KIND_COLOR[kind],
+        id: `${skill}_${variant}`,
+        name: `${VARIANT_PREFIX[variant]}${SKILL_LABELS[skill]}`,
+        kind: skill,
+        color: WEAPON_COLOR[skill],
         range: spec.range,
         mt: spec.mt,
         variant,
@@ -147,26 +100,24 @@ function build(): WeaponDef[] {
         desc: spec.desc
       }
       if (spec.effectiveAgainst) w.effectiveAgainst = spec.effectiveAgainst
-      if (spec.debuffAfterCombat) w.debuffAfterCombat = spec.debuffAfterCombat
       switch (variant) {
         case "brave":
           w.mt -= 2
           w.spdMod = -5
-          w.desc += " Две атаки подряд при инициативе, −5 Spd."
+          w.desc += ` Две атаки подряд при инициативе, −5 ${SPD}.`
           break
         case "killer":
           w.mt -= 1
           w.cdMod = -1
           w.desc += " Кулдаун спецприёма −1."
-          if (kind === "burr") w.debuffAfterCombat = { def: -7, res: -7 }
           break
         case "armorslayer":
-          w.effectiveAgainst = ["armor"]
-          w.desc += " Эффективно против брони."
+          w.effectiveAgainst = ["armored"]
+          w.desc += " Эффективно против armored."
           break
         case "cavslayer":
           w.effectiveAgainst = ["cavalry"]
-          w.desc += " Эффективно против кавалерии."
+          w.desc += " Эффективно против cavalry."
           break
         default:
           break
@@ -186,10 +137,18 @@ export function weaponDef(id: string): WeaponDef {
   return w
 }
 
-export function basicWeaponId(kind: WeaponKind): string {
-  return `${kind}_basic`
+export function basicWeaponId(skill: WeaponSkill): string {
+  return `${skill}_basic`
 }
 
-export function weaponsForKind(kind: WeaponKind): WeaponDef[] {
-  return WEAPONS.filter(w => w.kind === kind)
+export function weaponsForSkill(skill: WeaponSkill): WeaponDef[] {
+  return WEAPONS.filter(w => w.kind === skill)
+}
+
+export function isMagicWeapon(skill: WeaponSkill): boolean {
+  return SPECS[skill].magical
+}
+
+export function weaponRange(skill: WeaponSkill): 1 | 2 {
+  return SPECS[skill].range
 }

@@ -21,10 +21,10 @@ const flat = { hp: 20, atk: 10, spd: 5, def: 5, res: 5 }
 function setup(enemyPos = { x: 2, y: 2 }) {
   const b = makeBattle(
     [
-      { classId: "infantry_claw", pos: { x: 2, y: 7 }, baseStats: flat },
-      { classId: "infantry_bandage", pos: { x: 3, y: 7 }, baseStats: flat }
+      { classId: "infantry_sword", pos: { x: 2, y: 7 }, baseStats: flat },
+      { classId: "infantry_whiteMagic", pos: { x: 3, y: 7 }, baseStats: flat }
     ],
-    [{ classId: "infantry_claw", pos: enemyPos, baseStats: flat, stance: "hold" }]
+    [{ classId: "infantry_sword", pos: enemyPos, baseStats: flat, stance: "hold" }]
   )
   const save = createEmptySave(1)
   save.battle = b.state

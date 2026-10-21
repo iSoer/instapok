@@ -1,23 +1,26 @@
-import type { MoveType, Rarity, WeaponKind } from "@game/core/types"
-import { KIND_COLOR } from "@game/content/weapons"
-import { MOVE_NAMES, WEAPON_KIND_NAMES } from "@game/content/classes"
+import type { Rarity, WeaponSkill } from "@game/core/types"
+import { WEAPON_COLOR } from "@game/content/weapons"
+import { classMoveType, movementLabel } from "@game/content/classes"
+import { SKILL_LABELS } from "@shared/character/skills"
 import { COLOR_CSS, MOVE_EMOJI } from "../lib/format"
 
-export function WeaponBadge({ kind, name }: { kind: WeaponKind, name?: string }) {
+/** Оружейный навык модели (`SKILL_LABELS`) с цветом треугольника. */
+export function WeaponBadge({ skill, name }: { skill: WeaponSkill, name?: string }) {
   return (
     <span className="badge">
-      <span className="dot" style={{ background: COLOR_CSS[KIND_COLOR[kind]] }} />
-      {name ?? WEAPON_KIND_NAMES[kind]}
+      <span className="dot" style={{ background: COLOR_CSS[WEAPON_COLOR[skill]] }} />
+      {name ?? SKILL_LABELS[skill]}
     </span>
   )
 }
 
-export function MoveBadge({ moveType }: { moveType: MoveType }) {
+/** Передвижение класса так, как его показывает модель: животное (`mountOf`) или тип движения. */
+export function MoveBadge({ classId }: { classId: string }) {
   return (
     <span className="badge">
-      {MOVE_EMOJI[moveType]}
+      {MOVE_EMOJI[classMoveType(classId)]}
       {" "}
-      {MOVE_NAMES[moveType]}
+      {movementLabel(classId)}
     </span>
   )
 }

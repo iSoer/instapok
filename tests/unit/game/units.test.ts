@@ -16,7 +16,8 @@ import {
   weaponMt
 } from "@game/core/units"
 import { MAX_LEVEL, STATS } from "@game/core/types"
-import { CLASS_IDS, classDef, classWeapons, fwClass, unitClass, weaponKindsFor } from "@game/content/classes"
+import { CLASS_IDS, DANCER_CLASS, classDef, classWeapons, fwClass, unitClass } from "@game/content/classes"
+import { isMagicWeapon } from "@game/content/weapons"
 import { ROSTER } from "@game/content/balance"
 import { budgetRangeOf, loadCharacterModel } from "@/server/character-model/model"
 import { levelOneStats, totalOfStats } from "@shared/character/leveling"
@@ -43,14 +44,13 @@ describe("generateUnit", () => {
         expect(u.baseStats).toEqual(levelOneStats(u.maxStats, model.growth, model.rarities[u.rarity]))
         expect(canTakeClassNow(u, u.classId)).toBe(true)
         expect(classWeapons(u.classId)).toContain(u.weaponSkill)
-        expect(weaponKindsFor(u.classId, u.weaponSkill)).toContain(u.weaponKind)
         const vs = visibleStats(u)
         expect(vs.hp).toBeGreaterThan(0)
         for (const s of STATS) expect(vs[s]).toBeGreaterThanOrEqual(0)
         expect(u.learnable.length).toBeGreaterThan(0)
-        expect(u.skills.weapon).toBe(`${u.weaponKind}_basic`)
-        if (u.weaponKind === "bandage") expect(u.skills.assist).toBe("as_heal")
-        if (u.weaponKind === "purr") expect(u.skills.assist).toBe("as_purr")
+        expect(u.skills.weapon).toBe(`${u.weaponSkill}_basic`)
+        if (u.weaponSkill === "whiteMagic") expect(u.skills.assist).toBe("as_heal")
+        if (u.classId === DANCER_CLASS) expect(u.skills.assist).toBe("as_dance")
       }),
       { numRuns: 300 }
     )
@@ -61,7 +61,7 @@ describe("generateUnit", () => {
     const physical = combatStats(model, false)
     const magical = combatStats(model, true)
     expect(statsAtLevel(u, u.level)).toEqual(
-      ["hiss", "howl", "growl", "bandage"].includes(u.weaponKind) ? magical : physical
+      isMagicWeapon(u.weaponSkill) ? magical : physical
     )
     expect(physical.def).toBe(magical.def)
     expect(physical.hp).toBe(Math.round(model.hp * 0.33) + 5)
@@ -91,10 +91,8 @@ describe("generateUnit", () => {
   it("у каждого класса есть изучаемые навыки", () => {
     for (const id of CLASS_IDS) {
       for (const w of classWeapons(id)) {
-        for (const k of weaponKindsFor(id, w)) {
-          expect(allowedSkillIds(classDef(id, k), "cat").length).toBeGreaterThan(3)
-          expect(allowedSkillIds(classDef(id, k), "dog").length).toBeGreaterThan(3)
-        }
+        expect(allowedSkillIds(classDef(id, w), "cat").length).toBeGreaterThan(3)
+        expect(allowedSkillIds(classDef(id, w), "dog").length).toBeGreaterThan(3)
       }
     }
     const u = generateUnit({ seed: 1, level: 1 })
@@ -108,11 +106,12 @@ describe("generateRoster", () => {
       fc.property(fc.integer({ min: 0, max: 0x7fffffff }), fc.integer({ min: 0, max: 700 }), (seed, glory) => {
         const r = generateRoster({ seed, glory })
         expect(r.length).toBe(glory >= 150 ? 10 : 8)
-        const kinds = r.map(u => unitClass(u).weaponKind)
-        expect(kinds).toContain("bandage")
-        expect(kinds.filter(k => ["claw", "fang", "stick"].includes(k)).length).toBeGreaterThanOrEqual(2)
-        expect(kinds.some(k => ["hiss", "howl", "growl", "slingshot", "burr"].includes(k))).toBe(true)
-        expect(kinds.filter(k => k === "purr").length).toBeLessThanOrEqual(1)
+        const weapons = r.map(u => unitClass(u).weaponSkill)
+        expect(weapons).toContain("whiteMagic")
+        expect(weapons.filter(w => ["sword", "spear", "axe", "gauntlet"].includes(w)).length).toBeGreaterThanOrEqual(2)
+        expect(weapons.some(w => ["bow", "blackMagic"].includes(w))).toBe(true)
+        for (const w of ["sword", "spear", "axe"] as const) expect(weapons).toContain(w)
+        expect(r.filter(u => u.classId === DANCER_CLASS).length).toBeLessThanOrEqual(1)
         expect(r.some(u => u.species === "cat")).toBe(true)
         expect(r.some(u => u.species === "dog")).toBe(true)
         if (glory >= 300) expect(r.some(u => u.rarity === 5)).toBe(true)
@@ -135,10 +134,10 @@ describe("классы FW", () => {
         const next = reclassUnit(u, id, w)
         expect(next.classId).toBe(id)
         expect(next.weaponSkill).toBe(w)
-        expect(next.skills.weapon.startsWith(next.weaponKind)).toBe(true)
-        if (next.weaponKind === "bandage") expect(next.skills.assist).toBe("as_heal")
-        if (next.weaponKind === "purr") expect(next.skills.assist).toBe("as_purr")
-        else expect(next.skills.assist).not.toBe("as_purr")
+        expect(next.skills.weapon.startsWith(next.weaponSkill)).toBe(true)
+        if (next.weaponSkill === "whiteMagic") expect(next.skills.assist).toBe("as_heal")
+        if (next.classId === DANCER_CLASS) expect(next.skills.assist).toBe("as_dance")
+        else expect(next.skills.assist).not.toBe("as_dance")
       }
     }
     const closed = CLASS_IDS.find(id => !openClasses(u).includes(id))
@@ -155,11 +154,10 @@ describe("классы FW", () => {
           level,
           classId: l.classId,
           weaponSkill: l.weaponSkill,
-          weaponKind: l.weaponKind,
           isEnemy: true
         })
         expect(u.classId).toBe(l.classId)
-        expect(u.weaponKind).toBe(l.weaponKind)
+        expect(u.weaponSkill).toBe(l.weaponSkill)
       }
     }
     expect(loadoutsAt(1).every(l => l.cls.tier === "base")).toBe(true)

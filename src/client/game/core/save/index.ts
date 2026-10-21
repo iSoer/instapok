@@ -5,8 +5,8 @@ import { ARCHETYPES, statsSchema as modelStatsSchema } from "@shared/api/schema/
 import { aptitudesSchema, classIdSchema } from "@shared/api/schema/character/generated"
 import { WEAPON_SKILLS } from "@shared/character/skills"
 
-/** v3: бойцы — персонажи модели (класс FW, склонности, статы 1-го и 80-го уровня, уровни до 80). */
-export const SAVE_VERSION = 3
+/** v4: бойцы — персонажи модели; оружие — оружейный навык модели (без отдельного «звериного» оружия). */
+export const SAVE_VERSION = 4
 
 const stat = z.number()
 const partialStats = z.object({
@@ -31,7 +31,6 @@ const unitSchema = z.object({
   personalityId: z.string(),
   classId: classIdSchema,
   weaponSkill: z.enum(WEAPON_SKILLS),
-  weaponKind: z.enum(["claw", "fang", "stick", "hiss", "howl", "growl", "slingshot", "burr", "bandage", "purr"]),
   rarity: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
   level: z.number().int().min(1).max(MAX_LEVEL),
   xp: z.number(),
@@ -231,13 +230,13 @@ export function createEmptySave(now: number): SaveGame {
 }
 
 /**
- * Миграции: ключ — версия, С которой мигрируем. Сейвы v1–v2 (котики с шаблонами статов FEH, до модели персонажа)
- * не переводятся: у их бойцов нет склонностей и статов модели, их отклоняет `parseSave`.
+ * Миграции: ключ — версия, С которой мигрируем. Сейвы v1–v2 (шаблоны статов FEH, до модели персонажа)
+ * и v3 («звериное» оружие поверх навыков модели) не переводятся, их отклоняет `parseSave`.
  */
 export const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string, unknown>> = {}
 
 /** Первая версия сейва, которую ещё можно прочитать. */
-export const MIN_SAVE_VERSION = 3
+export const MIN_SAVE_VERSION = 4
 
 export function migrate(raw: Record<string, unknown>): Record<string, unknown> {
   let data = raw
@@ -264,7 +263,7 @@ export function parseSave(json: string): ParseResult {
   if (!raw || typeof raw !== "object") return { ok: false, error: "не объект" }
   const version = (raw as Record<string, unknown>)["version"]
   if (typeof version === "number" && version < MIN_SAVE_VERSION)
-    return { ok: false, error: `сейв версии ${version} от прежней игры без модели персонажа` }
+    return { ok: false, error: `сейв версии ${version} устарел: бойцы и оружие теперь из модели персонажа` }
   const migrated = migrate(raw as Record<string, unknown>)
   const res = saveSchema.safeParse(migrated)
   if (!res.success)

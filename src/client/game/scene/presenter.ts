@@ -7,11 +7,10 @@ import { MAP_SCENE_KEY, MapScene } from "./MapScene"
 import { CINEMATIC_SCENE_KEY, type CinematicData, type CombatEvent } from "./CinematicScene"
 import { banner, bloodBurst, floatText, ghostRise, healSparkles, starBurst, statusRing, stamp, tween, wait } from "./fx"
 import { specialDef } from "@game/content/skills/specials"
-import { weaponDef } from "@game/content/weapons"
 import { unitClass } from "@game/content/classes"
 import type { CritterPart } from "@game/art/index"
 import { deathSeed, pickDeathVariant, playDeathMap, preloadDeathParts, type DeathCtx } from "./deathFx"
-import { playQuickAttackFx, shakePx, weaponKindOf } from "./attackFx"
+import { playQuickAttackFx, shakePx, weaponKindOf, weaponKindOfUnit } from "./attackFx"
 
 /** Проигрывает события боя на сцене карты (и в кинематике). Логики игры не содержит. */
 export class GamePresenter implements Presenter {
@@ -378,7 +377,7 @@ export class GamePresenter implements Presenter {
           : undefined
       : undefined
     const killerUnit = killerId ? after.roster[killerId] : undefined
-    const killerKind = killerUnit ? weaponDef(killerUnit.skills.weapon).kind : undefined
+    const killerKind = killerUnit ? weaponKindOfUnit(killerUnit) : undefined
     let dir: 1 | -1 = side === "player" ? -1 : 1
     const kb = killerId ? after.units[killerId] : undefined
     if (kb && kb.pos.x !== pos.x) dir = pos.x > kb.pos.x ? 1 : -1
@@ -498,7 +497,7 @@ export class GamePresenter implements Presenter {
       const ab = after.units[ev.unitId]
       if (ab) actor.setHp(ev.unitHpAfter, ab.maxHp)
     }
-    if (target && ev.assistId === "as_purr") {
+    if (target && ev.assistId === "as_dance") {
       floatText(map, target.x, target.y - map.tile * 0.6, "↻ ещё раз!", "#ffd166", sp, { size: map.tile * 0.28 })
       target.setActed(false)
     }

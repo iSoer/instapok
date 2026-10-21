@@ -16,13 +16,13 @@ import {
   levelGains
 } from "@game/core/units"
 import { XP } from "@game/content/balance"
-import { TIER_NAMES } from "@game/content/classes"
+import { TIER_LABELS } from "@shared/character/classes"
 import { sharpenCost, trainCost } from "@game/core/progression"
 import { skillInfo } from "@game/content/index"
 import { traitDef } from "@game/content/traits"
 import { breedDef } from "@game/content/breeds"
 import { personalityText } from "@game/content/personalities"
-import { basicWeaponId, weaponsForKind } from "@game/content/weapons"
+import { basicWeaponId, weaponsForSkill } from "@game/content/weapons"
 import {
   $save,
   equipAction,
@@ -42,7 +42,7 @@ import { StatBar, StatsGrid } from "../components/Stats"
 import { BottomSheet, ConfirmModal } from "../components/Sheet"
 import { useToast } from "../components/Toast"
 import { ClassSheet, SkillRanks, aptitudeLine, weaponLine } from "../components/CharacterPanels"
-import { STAT_LABELS, fmtGains, speciesName } from "../lib/format"
+import { STAT_LABELS, atkLabel, fmtGains, speciesName } from "../lib/format"
 import { useReplay } from "../lib/animate"
 import { haptic } from "@game/platform/haptics"
 import type { WeaponSkill } from "@shared/character/skills"
@@ -135,10 +135,10 @@ export function UnitScreen({ unitId }: { unitId: string }) {
     const out: { id: string, state: "equipped" | "learned" | "learnable" }[] = []
     const equipped = unit.skills[s]
     if (s === "weapon") {
-      const ids = [basicWeaponId(cls.weaponKind), ...weaponsForKind(cls.weaponKind).map(w => w.id)]
+      const ids = [basicWeaponId(cls.weaponSkill), ...weaponsForSkill(cls.weaponSkill).map(w => w.id)]
       for (const id of [...new Set(ids)]) {
         if (id === equipped) out.push({ id, state: "equipped" })
-        else if (unit.learned.includes(id) || id === basicWeaponId(cls.weaponKind)) out.push({ id, state: "learned" })
+        else if (unit.learned.includes(id) || id === basicWeaponId(cls.weaponSkill)) out.push({ id, state: "learned" })
         else if (learnable.includes(id)) out.push({ id, state: "learnable" })
       }
       return out
@@ -189,8 +189,8 @@ export function UnitScreen({ unitId }: { unitId: string }) {
               </b>
             </div>
             <div className="row wrap">
-              <MoveBadge moveType={cls.moveType} />
-              <WeaponBadge kind={cls.weaponKind} />
+              <MoveBadge classId={cls.id} />
+              <WeaponBadge skill={cls.weaponSkill} />
             </div>
             <StatBar value={unit.xp} max={XP.perLevel} kind="xp" animate />
             <div className="row between small muted">
@@ -219,12 +219,12 @@ export function UnitScreen({ unitId }: { unitId: string }) {
               {unit.weaponTier ? ` · заточка ${"I".repeat(unit.weaponTier)}` : ""}
             </span>
           </div>
-          <StatsGrid stats={stats} animate />
+          <StatsGrid stats={stats} animate atkLabel={atkLabel(unit)} />
           <div className="stack" style={{ gap: 4 }}>
             {STATS.map((s, i) => (
               <div key={s} className="row small">
                 <span className="muted" style={{ width: 32 }}>
-                  {STAT_LABELS[s]}
+                  {s === "atk" ? atkLabel(unit) : STAT_LABELS[s]}
                 </span>
                 <div className="grow">
                   <StatBar value={own[s]} max={Math.max(1, atMax[s])} kind="growth" animate delay={120 + i * 60} />
@@ -261,7 +261,7 @@ export function UnitScreen({ unitId }: { unitId: string }) {
               {" "}
               <span className="muted small">
                 ·
-                {TIER_NAMES[cls.tier]}
+                {TIER_LABELS[cls.tier]}
               </span>
             </b>
             {hasClassUpgrade(unit) && <span className="chip red pop">Повышение</span>}

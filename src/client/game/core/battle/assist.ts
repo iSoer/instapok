@@ -4,7 +4,7 @@ import { terrainAt, unitAt } from "./query"
 import { isPassable } from "../map/pathing"
 import { assistDef } from "@game/content/skills/assists"
 import { specialDef } from "@game/content/skills/specials"
-import { unitClass } from "@game/content/classes"
+import { DANCER_CLASS, unitClass } from "@game/content/classes"
 import type { AssistDef } from "../skills/types"
 
 export interface AssistPlan {
@@ -120,7 +120,7 @@ export function planAssist(state: BattleState, unitId: string, from: Pos, target
     }
     case "refresh": {
       if (!target.acted) return invalid("союзник ещё не действовал")
-      if (unitClass(tUnit).weaponKind === "purr") return invalid("нельзя освежить Мурлыку")
+      if (tUnit.classId === DANCER_CLASS) return invalid("нельзя освежить танцора")
       base.refresh = true
       return base
     }

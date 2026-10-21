@@ -8,13 +8,16 @@ export function StatsGrid({
   asset,
   flaw,
   delta,
-  animate = false
+  animate = false,
+  atkLabel
 }: {
   stats: Stats
   asset?: Stat
   flaw?: Stat
   delta?: Partial<Stats>
   animate?: boolean
+  /** Подпись атаки бойца (Str или Mag модели); без неё — «Str/Mag». */
+  atkLabel?: string
 }) {
   return (
     <div className="grid-stats">
@@ -24,7 +27,7 @@ export function StatsGrid({
           className={`stat ${asset === s ? "asset" : ""} ${flaw === s ? "flaw" : ""} ${animate ? "pop-in" : ""}`}
           style={animate ? stagger(i, 50) : undefined}
         >
-          <div className="label">{STAT_LABELS[s]}</div>
+          <div className="label">{s === "atk" && atkLabel ? atkLabel : STAT_LABELS[s]}</div>
           <div className="value">{stats[s]}</div>
           {delta && delta[s]
             ? (

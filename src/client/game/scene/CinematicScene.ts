@@ -3,12 +3,11 @@ import type { BattleEvent, BattleState, BattleUnit, Pos, Side, Strike, UnitInsta
 import { terrainAt } from "@game/core/battle/query"
 import { biomeDef } from "@game/content/biomes"
 import { unitClass } from "@game/content/classes"
-import { KIND_COLOR } from "@game/content/weapons"
+import { WEAPON_COLOR } from "@game/content/weapons"
 import { specialDef } from "@game/content/skills/specials"
 import { displayName, unitClassName } from "@game/core/units"
 import { haptic } from "@game/platform/haptics"
 import type { CritterPart, Pose } from "@game/art/index"
-import { weaponDef } from "@game/content/weapons"
 import { deathSeed, pickDeathVariant, playDeathCine, preloadDeathParts, type DeathCtx } from "./deathFx"
 import { ensureTextures, TEX } from "./textures"
 import { FONT, WEAPON_COLOR_HEX, hpColor, textStyle } from "./style"
@@ -206,7 +205,7 @@ export class CinematicScene extends Phaser.Scene {
         sprite.setDisplaySize(size * 0.5, size * 0.5)
       }
       sprite.setFlipX(!onLeft)
-      const weaponColor = WEAPON_COLOR_HEX[KIND_COLOR[unitClass(unit).weaponKind]]
+      const weaponColor = WEAPON_COLOR_HEX[WEAPON_COLOR[unit.weaponSkill]]
       const barW = w * 0.42
       const barX = onLeft ? w * 0.04 : w * 0.54
       const topY = h * 0.07
@@ -516,7 +515,7 @@ export class CinematicScene extends Phaser.Scene {
     if (isPlayer) haptic("error")
     // Вариант гибели: тот же seed, что и на карте (юнит + ход), с уклоном под оружие убийцы.
     const killer = [...this.fighters.values()].find(o => o.id !== f.id)
-    const killerKind = killer ? weaponDef(killer.unit.skills.weapon).kind : undefined
+    const killerKind = killer ? weaponKindOfUnit(killer.unit) : undefined
     const variant = pickDeathVariant(deathSeed(f.id, this.cine.before.turn), killerKind, unitClass(f.unit).moveType)
     let pooled = false
     const ctx: DeathCtx = {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { CLASS_IDS, CLASS_NAMES, classWeapons, weaponKindsFor } from "@game/content/classes"
+import { CLASS_IDS, classWeapons } from "@game/content/classes"
+import { SKILL_LABELS } from "@shared/character/skills"
 import { WEAPONS } from "@game/content/weapons"
 import { SPECIALS } from "@game/content/skills/specials"
 import { ASSISTS } from "@game/content/skills/assists"
@@ -31,9 +32,11 @@ describe("контент", () => {
   })
   it("ссылки целостны", () => {
     for (const id of CLASS_IDS) {
-      expect(CLASS_NAMES[id]).toBeDefined()
-      for (const skill of classWeapons(id))
-        for (const k of weaponKindsFor(id, skill)) expect(WEAPONS.some(w => w.id === `${k}_basic`)).toBe(true)
+      for (const skill of classWeapons(id)) {
+        // Базовое оружие есть для каждого оружия класса и называется как навык модели
+        const basic = WEAPONS.find(w => w.id === `${skill}_basic`)
+        expect(basic?.name).toBe(SKILL_LABELS[skill])
+      }
     }
     for (const b of BIOMES) expect(FACTIONS.some(f => f.id === b.factionId)).toBe(true)
     for (const id of COMMON_SKILLS) {

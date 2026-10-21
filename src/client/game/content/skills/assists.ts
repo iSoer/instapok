@@ -4,7 +4,7 @@ export const ASSISTS: readonly AssistDef[] = [
   {
     id: "as_rally_atk",
     name: "Подбодрить: атака",
-    desc: "+4 Atk союзнику до начала вашей следующей фазы.",
+    desc: "+4 Str/Mag союзнику до начала вашей следующей фазы.",
     kind: "rally",
     spCost: 150,
     stage: "mvp",
@@ -116,13 +116,13 @@ export const ASSISTS: readonly AssistDef[] = [
     staffOnly: true
   },
   {
-    id: "as_purr",
+    id: "as_dance",
     name: "Мурлыканье",
-    desc: "Союзник может действовать ещё раз.",
+    desc: "Танец класса Dancer: союзник может действовать ещё раз.",
     kind: "refresh",
     spCost: 0,
     stage: "v1",
-    purrOnly: true
+    dancerOnly: true
   },
   {
     id: "as_ardent",

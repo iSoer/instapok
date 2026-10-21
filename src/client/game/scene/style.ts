@@ -23,7 +23,7 @@ export const FONT = "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica
 
 export const MOVE_GLYPH: Record<MoveType, string> = {
   infantry: "●",
-  armor: "■",
+  armored: "■",
   cavalry: "◆",
   flier: "▲"
 }

@@ -3,7 +3,7 @@ import type { UnitInstance } from "@game/core/types"
 import { displayName, unitClass, unitClassName, visibleStats } from "@game/core/units"
 import { UnitAvatar } from "./UnitAvatar"
 import { WeaponBadge, RarityStars } from "./Badges"
-import { MOVE_EMOJI } from "../lib/format"
+import { MOVE_EMOJI, atkLabel } from "../lib/format"
 import { stagger } from "../lib/animate"
 
 export function UnitRow({
@@ -51,7 +51,7 @@ export function UnitRow({
             {" "}
             {unitClassName(unit)}
           </span>
-          <WeaponBadge kind={cls.weaponKind} />
+          <WeaponBadge skill={cls.weaponSkill} />
           {tags}
         </div>
         <div className="mini-stats">
@@ -61,7 +61,7 @@ export function UnitRow({
             <b>{st.hp}</b>
           </span>
           <span>
-            Atk
+            {atkLabel(unit)}
             {" "}
             <b>{st.atk}</b>
           </span>

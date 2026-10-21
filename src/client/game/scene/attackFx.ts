@@ -1,5 +1,6 @@
 import type Phaser from "phaser"
-import type { BattleState, UnitInstance, WeaponKind } from "@game/core/types"
+import type { BattleState, UnitInstance } from "@game/core/types"
+import { artWeapon, type ArtWeapon } from "@game/art/index"
 import { weaponDef } from "@game/content/weapons"
 import { TEX } from "./textures"
 import { floatText, sceneAlive, wait } from "./fx"
@@ -13,7 +14,7 @@ export type FxTarget = Phaser.GameObjects.Image | Phaser.GameObjects.Container
 
 export interface AttackFxCtx {
   scene: Phaser.Scene
-  kind: WeaponKind
+  kind: ArtWeapon
   attacker: FxTarget
   defender: FxTarget
   /** Центры туловищ (у кинематика origin спрайта в лапах, у карты — центр клетки). */
@@ -44,11 +45,12 @@ export interface AttackFxResult {
 
 /* ---------- Оружие ---------- */
 
-export function weaponKindOfUnit(unit: UnitInstance): WeaponKind {
-  return weaponDef(unit.skills.weapon).kind
+/** Анимация удара — по рисунку оружейного навыка модели, которым бьёт боец. */
+export function weaponKindOfUnit(unit: UnitInstance): ArtWeapon {
+  return artWeapon(weaponDef(unit.skills.weapon).kind)
 }
 
-export function weaponKindOf(state: BattleState, unitId: string): WeaponKind {
+export function weaponKindOf(state: BattleState, unitId: string): ArtWeapon {
   const unit = state.roster[unitId]
   return unit ? weaponKindOfUnit(unit) : "claw"
 }

@@ -1,16 +1,37 @@
 import type { PassiveDef } from "@game/core/skills/types"
 import { alliesWithin, foesWithin, hpPct, unitsWithinOf } from "@game/core/battle/query"
-import type { Effect, WeaponKind } from "@game/core/types"
+import type { Effect, WeaponSkill } from "@game/core/types"
+import { SKILL_LABELS, WEAPON_SKILLS } from "@shared/character/skills"
+import { weaponRange } from "../weapons"
 
-const MELEE: WeaponKind[] = ["claw", "fang", "stick", "purr"]
-const RANGED: WeaponKind[] = ["hiss", "howl", "growl", "slingshot", "burr", "bandage"]
+// Оружейные навыки модели по дальности: ближний бой и дальний
+const MELEE: WeaponSkill[] = WEAPON_SKILLS.filter(w => weaponRange(w) === 1)
+const RANGED: WeaponSkill[] = WEAPON_SKILLS.filter(w => weaponRange(w) === 2)
+
+/** «Swordbreaker» и т. п.: против оружия `skill` гарантированная двойная, у врага двойной нет. */
+function breaker(skill: WeaponSkill): PassiveDef {
+  const label = SKILL_LABELS[skill]
+  return {
+    id: `b_breaker_${skill}`,
+    name: `${label}breaker`,
+    desc: `Против ${label} при HP ≥ 50 %: гарантированная двойная, враг без двойной.`,
+    slot: "b",
+    tier: 2,
+    spCost: 200,
+    stage: "v1",
+    hooks: {
+      followUp: ctx =>
+        ctx.foe.weapon.kind === skill && hpPct(ctx.self.bu) >= 0.5 ? { selfGuaranteed: true, foeDenied: true } : undefined
+    }
+  }
+}
 
 export const PASSIVES: readonly PassiveDef[] = [
   /* ---------- A ---------- */
   {
     id: "a_atk3",
     name: "Острый коготь",
-    desc: "+3 Atk.",
+    desc: "+3 Str/Mag.",
     slot: "a",
     tier: 1,
     spCost: 120,
@@ -73,7 +94,7 @@ export const PASSIVES: readonly PassiveDef[] = [
   {
     id: "a_death_blow",
     name: "Злобный бросок",
-    desc: "+6 Atk при инициативе.",
+    desc: "+6 Str/Mag при инициативе.",
     slot: "a",
     tier: 2,
     spCost: 200,
@@ -83,7 +104,7 @@ export const PASSIVES: readonly PassiveDef[] = [
   {
     id: "a_life_death",
     name: "Жизнь и смерть",
-    desc: "+5 Atk/Spd, −5 Def/Res.",
+    desc: "+5 Str/Mag/Spd, −5 Def/Res.",
     slot: "a",
     tier: 2,
     spCost: 200,
@@ -99,7 +120,7 @@ export const PASSIVES: readonly PassiveDef[] = [
     spCost: 300,
     stage: "v1",
     hooks: { counterAnyRange: true },
-    allow: { weaponKinds: RANGED }
+    allow: { weaponSkills: RANGED }
   },
   {
     id: "a_distant_counter",
@@ -110,7 +131,7 @@ export const PASSIVES: readonly PassiveDef[] = [
     spCost: 300,
     stage: "v1",
     hooks: { counterAnyRange: true },
-    allow: { weaponKinds: MELEE }
+    allow: { weaponSkills: MELEE }
   },
 
   /* ---------- B ---------- */
@@ -156,55 +177,13 @@ export const PASSIVES: readonly PassiveDef[] = [
     stage: "v1",
     hooks: { passThrough: true }
   },
-  {
-    id: "b_breaker_claw",
-    name: "Стопор-коготь",
-    desc: "Против Когтей при HP ≥ 50 %: гарантированная двойная, враг без двойной.",
-    slot: "b",
-    tier: 2,
-    spCost: 200,
-    stage: "v1",
-    hooks: {
-      followUp: ctx =>
-        ctx.foe.weapon.kind === "claw" && hpPct(ctx.self.bu) >= 0.5
-          ? { selfGuaranteed: true, foeDenied: true }
-          : undefined
-    }
-  },
-  {
-    id: "b_breaker_fang",
-    name: "Стопор-клык",
-    desc: "Против Клыков при HP ≥ 50 %: гарантированная двойная, враг без двойной.",
-    slot: "b",
-    tier: 2,
-    spCost: 200,
-    stage: "v1",
-    hooks: {
-      followUp: ctx =>
-        ctx.foe.weapon.kind === "fang" && hpPct(ctx.self.bu) >= 0.5
-          ? { selfGuaranteed: true, foeDenied: true }
-          : undefined
-    }
-  },
-  {
-    id: "b_breaker_stick",
-    name: "Стопор-палка",
-    desc: "Против Палок при HP ≥ 50 %: гарантированная двойная, враг без двойной.",
-    slot: "b",
-    tier: 2,
-    spCost: 200,
-    stage: "v1",
-    hooks: {
-      followUp: ctx =>
-        ctx.foe.weapon.kind === "stick" && hpPct(ctx.self.bu) >= 0.5
-          ? { selfGuaranteed: true, foeDenied: true }
-          : undefined
-    }
-  },
+  breaker("sword"),
+  breaker("spear"),
+  breaker("axe"),
   {
     id: "b_seal_atk",
     name: "Метка когтя",
-    desc: "После боя −7 Atk врагу до его следующего действия.",
+    desc: "После боя −7 Str/Mag врагу до его следующего действия.",
     slot: "b",
     tier: 1,
     spCost: 120,
@@ -231,7 +210,7 @@ export const PASSIVES: readonly PassiveDef[] = [
   {
     id: "c_hone_atk",
     name: "Вой атаки",
-    desc: "В начале хода +4 Atk соседним союзникам.",
+    desc: "В начале хода +4 Str/Mag соседним союзникам.",
     slot: "c",
     tier: 1,
     spCost: 120,
@@ -283,7 +262,7 @@ export const PASSIVES: readonly PassiveDef[] = [
   {
     id: "c_threaten_atk",
     name: "Угроза атаке",
-    desc: "В начале хода −5 Atk врагам в 2 клетках.",
+    desc: "В начале хода −5 Str/Mag врагам в 2 клетках.",
     slot: "c",
     tier: 2,
     spCost: 200,
@@ -296,7 +275,7 @@ export const PASSIVES: readonly PassiveDef[] = [
   {
     id: "c_spur_atk",
     name: "Шерсть к шерсти",
-    desc: "Соседние союзники получают +3 Atk в бою.",
+    desc: "Соседние союзники получают +3 Str/Mag в бою.",
     slot: "c",
     tier: 1,
     spCost: 120,

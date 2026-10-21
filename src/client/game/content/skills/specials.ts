@@ -54,7 +54,7 @@ export const SPECIALS: readonly SpecialDef[] = [
   {
     id: "sp_draconic",
     name: "Шквал когтей",
-    desc: "Урон +30 % своего Atk.",
+    desc: "Урон +30 % своего Str/Mag.",
     cd: 3,
     kind: "offense",
     spCost: 200,

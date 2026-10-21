@@ -14,8 +14,8 @@ const flat = { hp: 20, atk: 10, spd: 5, def: 5, res: 5 }
 describe("редьюсер боя", () => {
   it("wait перемещает и помечает юнита; второй раз действовать нельзя", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 } }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 } }]
     )
     const id = b.players[0]!.id
     const { state, events } = applyAction(b.state, { type: "wait", unitId: id, to: { x: 2, y: 5 } })
@@ -30,10 +30,10 @@ describe("редьюсер боя", () => {
   it("endPhase переключает фазу, снимает бонусы и начинает новый ход", () => {
     const b = makeBattle(
       [
-        { classId: "infantry_claw", pos: { x: 2, y: 7 }, skills: { c: "c_hone_atk" } },
-        { classId: "infantry_claw", pos: { x: 3, y: 7 } }
+        { classId: "infantry_sword", pos: { x: 2, y: 7 }, skills: { c: "c_hone_atk" } },
+        { classId: "infantry_sword", pos: { x: 3, y: 7 } }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 }, stance: "hold" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 }, stance: "hold" }]
     )
     // Вой атаки сработал при старте: сосед получил +4
     expect(b.state.units[b.players[1]!.id]!.bonuses.atk).toBe(4)
@@ -48,10 +48,10 @@ describe("редьюсер боя", () => {
   it("лечение Бинтом восстанавливает HP и даёт XP", () => {
     const b = makeBattle(
       [
-        { classId: "infantry_bandage", pos: { x: 2, y: 7 }, baseStats: flat },
-        { classId: "infantry_claw", pos: { x: 3, y: 7 }, baseStats: flat }
+        { classId: "infantry_whiteMagic", pos: { x: 2, y: 7 }, baseStats: flat },
+        { classId: "infantry_sword", pos: { x: 3, y: 7 }, baseStats: flat }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 } }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 } }]
     )
     const healer = b.players[0]!.id
     const ally = b.players[1]!.id
@@ -70,10 +70,10 @@ describe("редьюсер боя", () => {
   it("Поменяться меняет позиции", () => {
     const b = makeBattle(
       [
-        { classId: "infantry_claw", pos: { x: 2, y: 7 }, skills: { assist: "as_swap" } },
-        { classId: "infantry_claw", pos: { x: 3, y: 7 } }
+        { classId: "infantry_sword", pos: { x: 2, y: 7 }, skills: { assist: "as_swap" } },
+        { classId: "infantry_sword", pos: { x: 3, y: 7 } }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 } }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 } }]
     )
     const a = b.players[0]!.id
     const c = b.players[1]!.id
@@ -84,8 +84,8 @@ describe("редьюсер боя", () => {
 
   it("гибель всех бойцов — поражение; отступление — retreat", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, hp: 10, def: 0 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, atk: 50 } }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, hp: 10, def: 0 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, atk: 50 } }]
     )
     const { state } = applyAction(b.state, {
       type: "attack",
@@ -100,8 +100,8 @@ describe("редьюсер боя", () => {
 
   it("подкрепления появляются в заданный ход, победа только после них", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, atk: 50 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 5 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, atk: 50 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 5 } }],
       { reinforcements: [{ turn: 2, units: [{ unit: makeBattleUnitForWave(), pos: { x: 0, y: 0 } }] }] }
     )
     let s = applyAction(b.state, {
@@ -122,17 +122,17 @@ describe("редьюсер боя", () => {
     const b = makeBattle(
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 4 },
           baseStats: flat,
           traitId: "t_berserk",
           skills: { c: "c_spur_atk" }
         },
-        { classId: "infantry_claw", pos: { x: 3, y: 4 }, baseStats: flat, traitId: "t_biter" }
+        { classId: "infantry_sword", pos: { x: 3, y: 4 }, baseStats: flat, traitId: "t_biter" }
       ],
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 3 },
           baseStats: { ...flat, hp: 40 },
           traitId: "t_loyal",
@@ -158,8 +158,8 @@ describe("редьюсер боя", () => {
 
   it("повышение уровня в бою увеличивает maxHp", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, level: 1, baseStats: { ...flat, atk: 50 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, level: 20, baseStats: { ...flat, hp: 5 } }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, level: 1, baseStats: { ...flat, atk: 50 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, level: 20, baseStats: { ...flat, hp: 5 } }]
     )
     const id = b.players[0]!.id
     b.state.roster[id] = { ...b.state.roster[id]!, xp: 50 }
@@ -177,8 +177,8 @@ describe("редьюсер боя", () => {
 
 function makeBattleUnitForWave() {
   return makeBattle(
-    [{ classId: "infantry_claw", pos: { x: 0, y: 7 } }],
-    [{ classId: "infantry_claw", pos: { x: 5, y: 0 } }]
+    [{ classId: "infantry_sword", pos: { x: 0, y: 7 } }],
+    [{ classId: "infantry_sword", pos: { x: 5, y: 0 } }]
   ).enemies[0]!
 }
 

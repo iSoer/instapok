@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react"
 import type { BattleState, UnitInstance } from "@game/core/types"
 import type { CombatOutcome, CombatSideResult } from "@game/core/combat"
-import { unitClass } from "@game/core/units"
 import { specialDef } from "@game/content/skills/specials"
-import { KIND_COLOR } from "@game/content/weapons"
+import { WEAPON_COLOR } from "@game/content/weapons"
 import { UnitAvatar } from "../components/UnitAvatar"
 import { COLOR_CSS } from "../lib/format"
 
@@ -48,7 +47,7 @@ function Side({
   dies: boolean
   canCounter: boolean
 }) {
-  const kind = unitClass(unit).weaponKind
+  const skill = unit.weaponSkill
   return (
     <div
       className={`bf-fc-side ${enemy ? "enemy" : "player"} ${dies ? "dies" : ""} ${res.hpAfter < res.hpBefore ? "loss" : ""}`}
@@ -57,7 +56,7 @@ function Side({
         <UnitAvatar unit={unit} size="sm" animated={false} />
         <div className="bf-fc-names">
           <b>{unit.name}</b>
-          <i className="bf-fc-weapon" style={{ background: COLOR_CSS[KIND_COLOR[kind]] }} />
+          <i className="bf-fc-weapon" style={{ background: COLOR_CSS[WEAPON_COLOR[skill]] }} />
         </div>
       </div>
       <div className="bf-fc-hp">

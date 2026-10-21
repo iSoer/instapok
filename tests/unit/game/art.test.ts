@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  artWeapon,
   backdropSvg,
   critterSvg,
   tileSvg,
@@ -13,11 +14,9 @@ import {
   type Pose
 } from "@game/art/index"
 import { BIOMES } from "@game/content/biomes"
-import { CLASS_IDS, classDef, classWeapons, weaponKindsFor } from "@game/content/classes"
+import { CLASS_IDS, classDef, classWeapons } from "@game/content/classes"
 
-const CLASSES = CLASS_IDS.flatMap(id =>
-  classWeapons(id).flatMap(w => weaponKindsFor(id, w).map(k => classDef(id, k)))
-)
+const CLASSES = CLASS_IDS.flatMap(id => classWeapons(id).map(w => classDef(id, w)))
 import { generateUnit } from "@game/core/units"
 import type { TerrainId } from "@game/core/types"
 
@@ -47,7 +46,7 @@ describe("арт: миниатюры", () => {
             eyes: i % 6,
             accessory: i % 8,
             moveType: cls.moveType,
-            weapon: cls.weaponKind,
+            weapon: artWeapon(cls.weaponSkill),
             weaponColor: "#e63946",
             pose,
             boss: pose === "happy",
@@ -85,7 +84,7 @@ describe("арт: миниатюры", () => {
   it("части тела для разлёта — корректный SVG для всех видов и классов", () => {
     for (let i = 0; i < 24; i++) {
       const cls = CLASSES[(i * 7) % CLASSES.length]!
-      const u = { ...generateUnit({ seed: 5000 + i, level: 3 }), classId: cls.id, weaponKind: cls.weaponKind }
+      const u = { ...generateUnit({ seed: 5000 + i, level: 3 }), classId: cls.id, weaponSkill: cls.weaponSkill }
       for (const part of CRITTER_PARTS) wellFormed(unitPartSvg(u, part))
     }
   })

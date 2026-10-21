@@ -1,12 +1,11 @@
 import type { BattleState, BattleUnit, UnitInstance } from "@game/core/types"
-import { displayName, unitClass, unitClassName } from "@game/core/units"
+import { displayName, unitClass, unitClassName, unitWeapon } from "@game/core/units"
 import { unitStatsInBattle } from "@game/core/battle/reducer"
 import { skillInfo } from "@game/content/index"
 import { specialDef } from "@game/content/skills/specials"
-import { KIND_COLOR } from "@game/content/weapons"
-import { WEAPON_KIND_NAMES } from "@game/content/classes"
+import { WEAPON_COLOR } from "@game/content/weapons"
 import { UnitAvatar } from "../components/UnitAvatar"
-import { COLOR_CSS } from "../lib/format"
+import { COLOR_CSS, atkLabel } from "../lib/format"
 
 /** Компактная карточка бойца в нижней полосе: аватар, имя, HP, статы, спецприём. */
 export function UnitCard({
@@ -59,8 +58,8 @@ export function UnitCard({
         </div>
         <div className="bf-unit-meta">
           <span className="bf-weapon">
-            <i style={{ background: COLOR_CSS[KIND_COLOR[cls.weaponKind]] }} />
-            {WEAPON_KIND_NAMES[cls.weaponKind]}
+            <i style={{ background: COLOR_CSS[WEAPON_COLOR[cls.weaponSkill]] }} />
+            {unitWeapon(unit).name}
           </span>
           <span className="bf-muted">
             {unitClassName(unit)}
@@ -81,7 +80,7 @@ export function UnitCard({
         {st && (
           <div className="bf-stats">
             <span>
-              Atk
+              {atkLabel(unit)}
               {" "}
               <b>{st.atk}</b>
             </span>

@@ -6,7 +6,8 @@ import { BLUSH, INK, NOSE, shade, type FurArt } from "./palettes"
 
 export type ArtSpecies = "cat" | "dog" | "mouse"
 export type Pose = "idle" | "run" | "hurt" | "dead" | "happy" | "carried" | "blink"
-export type ArtMoveType = "infantry" | "armor" | "cavalry" | "flier"
+export type ArtMoveType = "infantry" | "armored" | "cavalry" | "flier"
+/** Рисунок оружия в руках (визуальный слой; какое оружие что рисует — `ART_WEAPON` в art/index.ts). */
 export type ArtWeapon
   = | "claw"
     | "fang"
@@ -258,7 +259,7 @@ function gearBehind(a: CritterArt): string {
 }
 
 function gearBody(a: CritterArt): string {
-  if (a.moveType === "armor" && a.species === "cat") {
+  if (a.moveType === "armored" && a.species === "cat") {
     return `<g class="box"><rect x="26" y="74" width="68" height="34" rx="3" fill="#dcae72" stroke="#a8763f" stroke-width="1.5" />
       <path d="M26 74 l-9 -9 h30 l-9 9 z" fill="#e8c18b" stroke="#a8763f" stroke-width="1.2" stroke-linejoin="round" />
       <path d="M94 74 l9 -9 h-30 l9 9 z" fill="#e8c18b" stroke="#a8763f" stroke-width="1.2" stroke-linejoin="round" />
@@ -269,13 +270,13 @@ function gearBody(a: CritterArt): string {
 }
 
 function gearHead(a: CritterArt): string {
-  if (a.moveType === "armor" && a.species === "dog") {
+  if (a.moveType === "armored" && a.species === "dog") {
     return `<g class="pot"><ellipse cx="60" cy="36" rx="32" ry="7" fill="#9aa3b1" stroke="#5f6773" stroke-width="1.5" />
       <path d="M30 14 h60 v22 h-60 z" fill="#b7bfcb" stroke="#5f6773" stroke-width="1.5" />
       <path d="M30 14 h60" stroke="#e5eaf0" stroke-width="3" /><path d="M24 20 h-6 v8 h6 M96 20 h6 v8 h-6" fill="none" stroke="#5f6773" stroke-width="3" stroke-linecap="round" />
       <ellipse cx="60" cy="14" rx="30" ry="5" fill="#d6dce4" stroke="#5f6773" stroke-width="1.2" /><circle cx="60" cy="10" r="3.5" fill="#5f6773" /></g>`
   }
-  if (a.moveType === "armor" && a.species === "mouse") {
+  if (a.moveType === "armored" && a.species === "mouse") {
     return `<g class="thimble"><path d="M40 12 q20 -16 40 0 v24 h-40 z" fill="#c9cbd4" stroke="#6f737f" stroke-width="1.5" stroke-linejoin="round" />
       <path d="M40 30 h40" stroke="#8c909b" stroke-width="2" /><g fill="#8c909b"><circle cx="50" cy="12" r="1.3" /><circle cx="60" cy="8" r="1.3" /><circle cx="70" cy="12" r="1.3" /><circle cx="46" cy="20" r="1.3" /><circle cx="56" cy="17" r="1.3" /><circle cx="66" cy="17" r="1.3" /><circle cx="75" cy="21" r="1.3" /></g></g>`
   }

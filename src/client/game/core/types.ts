@@ -1,22 +1,15 @@
 /** Базовые типы игрового ядра. Никаких зависимостей от DOM/Phaser. */
 import type { Archetype } from "@shared/api/schema/pokemon/generated"
 import { MAX_LEVEL as CHARACTER_MAX_LEVEL, type StatValues } from "@shared/character/leveling"
+import type { Movement } from "@shared/character/classes"
 import type { Aptitudes, WeaponSkill } from "@shared/character/skills"
+
+export type { WeaponSkill }
 
 export type Species = "cat" | "dog" | "mouse"
 export type Gender = "m" | "f"
-export type MoveType = "infantry" | "armor" | "cavalry" | "flier"
-export type WeaponKind
-  = | "claw"
-    | "fang"
-    | "stick"
-    | "hiss"
-    | "howl"
-    | "growl"
-    | "slingshot"
-    | "burr"
-    | "bandage"
-    | "purr"
+/** Типы движения — из модели персонажа (`movementOf` класса FW). */
+export type MoveType = Movement
 export type Color = "red" | "blue" | "green" | "colorless"
 export type Stat = "hp" | "atk" | "spd" | "def" | "res"
 export type Stats = Record<Stat, number>
@@ -111,10 +104,8 @@ export interface UnitInstance {
   personalityId: string
   /** Класс Fortune's Weave (`CHARACTER_CLASSES`); тип движения выводится из него. */
   classId: string
-  /** Навык оружия FW, которым боец сражается; его ранг добавляет Mt. */
+  /** Оружейный навык модели, которым боец сражается; его ранг добавляет Mt. */
   weaponSkill: WeaponSkill
-  /** Звериное оружие, в которое превращается навык (меч — Коготь, копьё — Клык…). */
-  weaponKind: WeaponKind
   rarity: Rarity
   level: number
   xp: number

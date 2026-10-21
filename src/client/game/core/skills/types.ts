@@ -9,7 +9,7 @@ import type {
   Stat,
   Stats,
   UnitInstance,
-  WeaponKind
+  WeaponSkill
 } from "../types"
 
 export type WeaponVariant = "basic" | "brave" | "killer" | "armorslayer" | "cavslayer"
@@ -17,7 +17,8 @@ export type WeaponVariant = "basic" | "brave" | "killer" | "armorslayer" | "cavs
 export interface WeaponDef {
   id: string
   name: string
-  kind: WeaponKind
+  /** Оружейный навык модели. */
+  kind: WeaponSkill
   color: Color
   range: 1 | 2
   mt: number
@@ -29,20 +30,18 @@ export interface WeaponDef {
   spdMod?: number
   /** Изменение стартового/максимального кулдауна спецприёма. */
   cdMod?: number
-  /** Штрафы цели (и врагам рядом) после боя — Репейник. */
-  debuffAfterCombat?: Partial<Stats>
   spCost: number
   desc: string
 }
 
-/** Боевой класс: класс Fortune's Weave и звериное оружие, которым боец сражается. */
+/** Боевой класс: класс FW из модели и оружейный навык модели, которым боец сражается. */
 export interface ClassDef {
   /** id класса FW (`CHARACTER_CLASSES`). */
   id: string
   name: string
   tier: ClassTier
   moveType: MoveType
-  weaponKind: WeaponKind
+  weaponSkill: WeaponSkill
 }
 
 /* ---------- Контекст боя для хуков ---------- */
@@ -120,7 +119,7 @@ export interface SpecialDef {
   spCost: number
   stage: Stage
   onlySpecies?: Species
-  /** Только для Бинта. */
+  /** Только для White Magic. */
   staffOnly?: boolean
   offense?: {
     ignoreDefPct?: number
@@ -163,7 +162,8 @@ export interface AssistDef {
   stats?: Partial<Stats>
   heal?: number
   staffOnly?: boolean
-  purrOnly?: boolean
+  /** Только для класса Dancer (танец — «освежить» союзника). */
+  dancerOnly?: boolean
 }
 
 export interface PassiveDef {
@@ -176,7 +176,7 @@ export interface PassiveDef {
   stage: Stage
   hooks: SkillHooks
   /** Ограничения по классам. */
-  allow?: { moveTypes?: MoveType[], weaponKinds?: WeaponKind[], notWeaponKinds?: WeaponKind[] }
+  allow?: { moveTypes?: MoveType[], weaponSkills?: WeaponSkill[] }
 }
 
 export interface TraitDef {
@@ -186,6 +186,4 @@ export interface TraitDef {
   hooks: SkillHooks
   onlySpecies?: Species
   rare?: boolean
-  /** Не выдавать Мурлыкам / только не Мурлыкам и т. п. */
-  notWeaponKinds?: WeaponKind[]
 }

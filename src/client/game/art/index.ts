@@ -1,7 +1,7 @@
-import type { UnitInstance } from "@game/core/types"
+import type { UnitInstance, WeaponSkill } from "@game/core/types"
 import { unitClass } from "@game/content/classes"
-import { KIND_COLOR } from "@game/content/weapons"
-import { critterSvg, critterPartSvg, type CritterArt, type CritterPart, type Pose } from "./critter"
+import { WEAPON_COLOR } from "@game/content/weapons"
+import { critterSvg, critterPartSvg, type ArtWeapon, type CritterArt, type CritterPart, type Pose } from "./critter"
 import { eyeArt, furArt } from "./palettes"
 
 export {
@@ -11,6 +11,7 @@ export {
   CRITTER_PART_ANCHORS,
   VIEW,
   VIEW_BOX,
+  type ArtWeapon,
   type CritterArt,
   type Pose,
   type CritterPart
@@ -25,6 +26,21 @@ export const WEAPON_HEX: Record<string, string> = {
   blue: "#3a86ff",
   green: "#2ec4b6",
   colorless: "#adb5bd"
+}
+
+/** Чем рисуется оружейный навык модели в лапах (только визуал: когти, древко, рогатка…). */
+export const ART_WEAPON: Record<WeaponSkill, ArtWeapon> = {
+  sword: "claw",
+  spear: "fang",
+  axe: "stick",
+  gauntlet: "purr",
+  bow: "slingshot",
+  blackMagic: "hiss",
+  whiteMagic: "bandage"
+}
+
+export function artWeapon(skill: WeaponSkill): ArtWeapon {
+  return ART_WEAPON[skill]
 }
 
 export interface UnitArtOptions {
@@ -46,8 +62,8 @@ export function unitArt(unit: UnitInstance, opts: UnitArtOptions = {}): CritterA
     eyes: unit.appearance.eyes,
     accessory: unit.appearance.accessory,
     moveType: cls.moveType,
-    weapon: cls.weaponKind,
-    weaponColor: WEAPON_HEX[KIND_COLOR[cls.weaponKind]] ?? "#adb5bd",
+    weapon: artWeapon(cls.weaponSkill),
+    weaponColor: WEAPON_HEX[WEAPON_COLOR[cls.weaponSkill]] ?? "#adb5bd",
     pose: opts.pose ?? "idle",
     animated: opts.animated ?? false
   }

@@ -9,7 +9,7 @@ import type {
   UnitSkills,
   Difficulty,
   Stance,
-  WeaponKind
+  WeaponSkill
 } from "@game/core/types"
 import { MAP_H, MAP_W, STATS } from "@game/core/types"
 import { generateUnit, statsAtLevel } from "@game/core/units"
@@ -17,11 +17,11 @@ import { createBattle } from "@game/core/battle/reducer"
 import { MODEL_SCALE } from "@game/content/balance"
 import { fwClass } from "@game/content/classes"
 import { classBonusOf, type CharacterClass } from "@shared/character/classes"
-import { aptitudesOf, type WeaponSkill } from "@shared/character/skills"
+import { aptitudesOf } from "@shared/character/skills"
 import type { StatValues } from "@shared/character/leveling"
 
 export interface TestUnitSpec {
-  /** Комплект «движение_оружие» в духе прежних классов: infantry_claw, armor_fang, flier_burr… */
+  /** Комплект «движение_оружие» в терминах модели: infantry_sword, armored_spear, flier_bow, dancer_sword… */
   classId: string
   level?: number
   seed?: number
@@ -36,24 +36,13 @@ export interface TestUnitSpec {
   isBoss?: boolean
 }
 
-/** Класс FW для типа движения; Мурлыка — Танцор, Репейник — Плут. */
-const MOVE_CLASS: Record<MoveType, string> = {
+/** Класс модели для типа движения (`movementOf`); `dancer_*` — класс Dancer. */
+const MOVE_CLASS: Record<MoveType | "dancer", string> = {
   infantry: "commoner",
-  armor: "armored-knight",
+  armored: "armored-knight",
   cavalry: "light-cavalry",
-  flier: "wing-soldier"
-}
-const KIND_SKILL: Record<WeaponKind, WeaponSkill> = {
-  claw: "sword",
-  fang: "spear",
-  stick: "axe",
-  hiss: "blackMagic",
-  howl: "blackMagic",
-  growl: "blackMagic",
-  slingshot: "bow",
-  burr: "bow",
-  bandage: "whiteMagic",
-  purr: "sword"
+  flier: "wing-soldier",
+  dancer: "dancer"
 }
 
 /** Стат модели, который после `MODEL_SCALE` даёт ровно `target` (модель → бой обратимо на целых). */
@@ -91,7 +80,7 @@ let counter = 1
 
 export function makeUnit(spec: TestUnitSpec, isEnemy: boolean): UnitInstance {
   const seed = spec.seed ?? counter++ * 7919
-  const [move, kind] = spec.classId.split("_") as [MoveType, WeaponKind]
+  const [move, weapon] = spec.classId.split("_") as [MoveType | "dancer", WeaponSkill]
   const u = generateUnit({
     seed,
     level: spec.level ?? 1,
@@ -103,10 +92,9 @@ export function makeUnit(spec: TestUnitSpec, isEnemy: boolean): UnitInstance {
     isBoss: spec.isBoss
   })
   // Комплект ставится напрямую, в обход ярусов: бою не важно, открыт ли класс на уровне
-  u.classId = kind === "purr" ? "dancer" : kind === "burr" ? "rogue" : MOVE_CLASS[move]
-  u.weaponSkill = KIND_SKILL[kind]
-  u.weaponKind = kind
-  u.skills = { ...u.skills, weapon: `${kind}_basic` }
+  u.classId = MOVE_CLASS[move]
+  u.weaponSkill = weapon
+  u.skills = { ...u.skills, weapon: `${weapon}_basic` }
   // Все навыки обычные: ранг оружия на низких уровнях не добавляет Mt
   u.aptitudes = aptitudesOf([])
   if (spec.baseStats) {
@@ -125,8 +113,8 @@ export function makeUnit(spec: TestUnitSpec, isEnemy: boolean): UnitInstance {
   if (!spec.skills?.a) delete u.skills.a
   if (!spec.skills?.b) delete u.skills.b
   if (!spec.skills?.c) delete u.skills.c
-  if (kind === "bandage") u.skills.assist = spec.skills?.assist ?? "as_heal"
-  else if (kind === "purr") u.skills.assist = spec.skills?.assist ?? "as_purr"
+  if (weapon === "whiteMagic") u.skills.assist = spec.skills?.assist ?? "as_heal"
+  else if (move === "dancer") u.skills.assist = spec.skills?.assist ?? "as_dance"
   else if (!spec.skills?.assist) delete u.skills.assist
   return u
 }

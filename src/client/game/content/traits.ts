@@ -14,19 +14,19 @@ export const TRAITS: readonly TraitDef[] = [
   {
     id: "t_pigeon_hunter",
     name: "Охотник на голубей",
-    desc: "×1.3 урона по летунам.",
+    desc: "×1.3 урона по flier.",
     hooks: { damageMultiplier: ctx => (ctx.foe.cls.moveType === "flier" ? 1.3 : 1) }
   },
   {
     id: "t_berserk",
     name: "Берсерк",
-    desc: "+4 Atk при HP < 50 %.",
+    desc: "+4 Str/Mag при HP < 50 %.",
     hooks: { combatStatMod: ctx => (hpPct(ctx.self.bu) < 0.5 ? { atk: 4 } : undefined) }
   },
   {
     id: "t_coward",
     name: "Трус",
-    desc: "−2 Atk всегда, +4 Spd при HP < 50 %.",
+    desc: "−2 Str/Mag всегда, +4 Spd при HP < 50 %.",
     hooks: { statBonus: { atk: -2 }, combatStatMod: ctx => (hpPct(ctx.self.bu) < 0.5 ? { spd: 4 } : undefined) }
   },
   {
@@ -77,13 +77,13 @@ export const TRAITS: readonly TraitDef[] = [
   {
     id: "t_loud",
     name: "Громкий",
-    desc: "В начале хода −3 Atk соседним врагам.",
+    desc: "В начале хода −3 Str/Mag соседним врагам.",
     hooks: {
       onTurnStart: (state, self) =>
         foesWithin(state, self, 1).map((f): Effect => ({ type: "debuff", unitId: f.unitId, stats: { atk: -3 } }))
     }
   },
-  { id: "t_mumbler", name: "Мямля", desc: "+2 Res.", notWeaponKinds: ["purr"], hooks: { statBonus: { res: 2 } } },
+  { id: "t_mumbler", name: "Мямля", desc: "+2 Res.", hooks: { statBonus: { res: 2 } } },
   {
     id: "t_biter",
     name: "Кусачий",
@@ -93,7 +93,7 @@ export const TRAITS: readonly TraitDef[] = [
   {
     id: "t_vengeful",
     name: "Злопамятный",
-    desc: "+5 Atk против убийцы союзника до конца боя.",
+    desc: "+5 Str/Mag против убийцы союзника до конца боя.",
     hooks: {
       onAllyDeath: (_state, self, _dead, killer) =>
         killer ? [{ type: "flag", unitId: self.unitId, key: `vengeance:${killer.unitId}`, value: 1 }] : [],
@@ -103,7 +103,7 @@ export const TRAITS: readonly TraitDef[] = [
   {
     id: "t_homebody",
     name: "Домашний",
-    desc: "−2 Atk, +3 HP, +20 % XP.",
+    desc: "−2 Str/Mag, +3 HP, +20 % XP.",
     hooks: { statBonus: { atk: -2, hp: 3 }, xpMultiplier: 1.2 }
   },
   { id: "t_stray", name: "Бродяга", desc: "Заросли не замедляют.", hooks: { ignoreForestSlow: true } },

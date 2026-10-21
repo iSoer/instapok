@@ -22,7 +22,7 @@ import { RarityStars, WeaponBadge } from "../components/Badges"
 import { BottomSheet } from "../components/Sheet"
 import { UnitDetails } from "../components/UnitDetails"
 import { useToast } from "../components/Toast"
-import { MOVE_EMOJI } from "../lib/format"
+import { MOVE_EMOJI, atkLabel } from "../lib/format"
 import { stagger, useReplay } from "../lib/animate"
 import { haptic } from "@game/platform/haptics"
 
@@ -59,7 +59,7 @@ function RosterCard({
           </div>
         </div>
       </div>
-      <WeaponBadge kind={cls.weaponKind} />
+      <WeaponBadge skill={cls.weaponSkill} />
       <div className="stats-mini">
         <span>
           <b>{st.hp}</b>
@@ -67,7 +67,7 @@ function RosterCard({
         </span>
         <span>
           <b>{st.atk}</b>
-          Atk
+          {atkLabel(unit)}
         </span>
         <span>
           <b>{st.spd}</b>

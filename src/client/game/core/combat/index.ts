@@ -3,7 +3,7 @@ import { STATS, addStats, emptyStats, manhattan } from "../types"
 import type { CombatCtx, CombatUnitView, StrikeInfo } from "../skills/types"
 import { counterAnyRange, specialMaxCd, unitKit, wrathfulStaff } from "../skills/engine"
 import { visibleStats } from "../units"
-import { livingUnits, terrainAt, unitsWithinOf } from "../battle/query"
+import { livingUnits, terrainAt } from "../battle/query"
 import { COMBAT } from "@game/content/balance"
 
 export interface CombatSideResult {
@@ -325,12 +325,6 @@ export function simulateCombat(
           foeDied: !dAlive
         }) ?? [])
       )
-    if (A.weapon.debuffAfterCombat && aStruck) {
-      const targets = unitsWithinOf(state, d.pos, 2, d.side)
-      for (const t of targets)
-        if (t.unitId === d.unitId ? dAlive : true)
-          afterEffects.push({ type: "debuff", unitId: t.unitId, stats: A.weapon.debuffAfterCombat })
-    }
   }
   if (dAlive) {
     for (const h of hooksD)
@@ -343,12 +337,6 @@ export function simulateCombat(
           foeDied: !aAlive
         }) ?? [])
       )
-    if (D.weapon.debuffAfterCombat && dStruck) {
-      const targets = unitsWithinOf(state, a.pos, 2, a.side)
-      for (const t of targets)
-        if (t.unitId === a.unitId ? aAlive : true)
-          afterEffects.push({ type: "debuff", unitId: t.unitId, stats: D.weapon.debuffAfterCombat })
-    }
   }
 
   const aStrikes = strikes.filter(s => s.attackerId === a.unitId)

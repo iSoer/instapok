@@ -9,20 +9,20 @@ const flat = { hp: 20, atk: 10, spd: 5, def: 5, res: 5 }
 
 describe("треугольник оружия", () => {
   it("коготь > палка > клык > коготь; бесцветные нейтральны", () => {
-    expect(triangleOf(weaponDef("claw_basic"), weaponDef("stick_basic"))).toBe("adv")
-    expect(triangleOf(weaponDef("stick_basic"), weaponDef("fang_basic"))).toBe("adv")
-    expect(triangleOf(weaponDef("fang_basic"), weaponDef("claw_basic"))).toBe("adv")
-    expect(triangleOf(weaponDef("claw_basic"), weaponDef("fang_basic"))).toBe("dis")
-    expect(triangleOf(weaponDef("slingshot_basic"), weaponDef("claw_basic"))).toBe("neutral")
-    expect(triangleOf(weaponDef("hiss_basic"), weaponDef("growl_basic"))).toBe("adv")
+    expect(triangleOf(weaponDef("sword_basic"), weaponDef("axe_basic"))).toBe("adv")
+    expect(triangleOf(weaponDef("axe_basic"), weaponDef("spear_basic"))).toBe("adv")
+    expect(triangleOf(weaponDef("spear_basic"), weaponDef("sword_basic"))).toBe("adv")
+    expect(triangleOf(weaponDef("sword_basic"), weaponDef("spear_basic"))).toBe("dis")
+    expect(triangleOf(weaponDef("bow_basic"), weaponDef("sword_basic"))).toBe("neutral")
+    expect(triangleOf(weaponDef("blackMagic_basic"), weaponDef("gauntlet_basic"))).toBe("neutral")
   })
 })
 
 describe("simulateCombat", () => {
   it("базовый урон = Atk − Def, обе стороны бьют по разу при равной скорости", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: flat, species: "dog" }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: flat, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" }]
     )
     const [p] = b.players
     const [e] = b.enemies
@@ -38,10 +38,10 @@ describe("simulateCombat", () => {
 
   it("преимущество треугольника даёт +20 % атаки, недостаток −20 %", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: flat, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: flat, species: "dog" }],
       [
-        { classId: "infantry_stick", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" },
-        { classId: "infantry_fang", pos: { x: 3, y: 4 }, baseStats: flat, species: "dog" }
+        { classId: "infantry_axe", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" },
+        { classId: "infantry_spear", pos: { x: 3, y: 4 }, baseStats: flat, species: "dog" }
       ]
     )
     const p = b.players[0]!
@@ -57,8 +57,8 @@ describe("simulateCombat", () => {
 
   it("скорость +5 даёт двойную атаку в правильном порядке", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, spd: 12 }, species: "dog" }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, spd: 5 }, species: "dog" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, spd: 12 }, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, spd: 5 }, species: "dog" }]
     )
     const out = simulateCombat(b.state, b.players[0]!.id, b.enemies[0]!.id, { x: 2, y: 4 })
     expect(out.attackerFollowUp).toBe(true)
@@ -67,8 +67,8 @@ describe("simulateCombat", () => {
 
   it("дальник не получает контратаку от ближника и наоборот", () => {
     const b = makeBattle(
-      [{ classId: "infantry_slingshot", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" }]
+      [{ classId: "infantry_bow", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" }]
     )
     const out = simulateCombat(b.state, b.players[0]!.id, b.enemies[0]!.id, { x: 2, y: 5 })
     expect(out.defenderCanCounter).toBe(false)
@@ -77,10 +77,10 @@ describe("simulateCombat", () => {
 
   it("Дальний контрудар позволяет ближнику ответить дальнику", () => {
     const b = makeBattle(
-      [{ classId: "infantry_slingshot", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
+      [{ classId: "infantry_bow", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 3 },
           baseStats: flat,
           species: "dog",
@@ -94,8 +94,8 @@ describe("simulateCombat", () => {
 
   it("рогатка эффективна против летунов (×1.5)", () => {
     const b = makeBattle(
-      [{ classId: "infantry_slingshot", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
-      [{ classId: "flier_claw", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" }]
+      [{ classId: "infantry_bow", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
+      [{ classId: "flier_sword", pos: { x: 2, y: 3 }, baseStats: flat, species: "dog" }]
     )
     const p = b.players[0]!
     const out = simulateCombat(b.state, p.id, b.enemies[0]!.id, { x: 2, y: 5 })
@@ -106,8 +106,8 @@ describe("simulateCombat", () => {
 
   it("Укрытие даёт +30 % Def, Бинт бьёт вполсилы по Res", () => {
     const b = makeBattle(
-      [{ classId: "infantry_bandage", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, res: 4 }, species: "dog" }],
+      [{ classId: "infantry_whiteMagic", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, res: 4 }, species: "dog" }],
       { tiles: plainTiles({ "2,3": "cover" }) }
     )
     const p = b.players[0]!
@@ -122,14 +122,14 @@ describe("simulateCombat", () => {
     const b = makeBattle(
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 4 },
           baseStats: { ...flat, spd: 20 },
           species: "dog",
           skills: { special: "sp_glimmer" }
         }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 60 }, species: "dog" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 60 }, species: "dog" }]
     )
     const p = b.players[0]!
     const st = b.state
@@ -147,14 +147,14 @@ describe("simulateCombat", () => {
     const b = makeBattle(
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 4 },
           baseStats: { ...flat, spd: 10 },
           species: "dog",
-          skills: { weapon: "claw_brave" }
+          skills: { weapon: "sword_brave" }
         }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 80, spd: 5 }, species: "dog" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 80, spd: 5 }, species: "dog" }]
     )
     const out = simulateCombat(b.state, b.players[0]!.id, b.enemies[0]!.id, { x: 2, y: 4 })
     // brave даёт -5 Spd → 10-5=5 → без двойной от скорости; 2 удара подряд + контратака
@@ -163,8 +163,8 @@ describe("simulateCombat", () => {
 
   it("смерть прерывает бой, прогноз совпадает с результатом редьюсера", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, atk: 40 }, species: "dog" }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 15 }, species: "dog" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, atk: 40 }, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 15 }, species: "dog" }]
     )
     const p = b.players[0]!
     const e = b.enemies[0]!
@@ -180,10 +180,10 @@ describe("simulateCombat", () => {
 
   it("Ответка даёт гарантированную двойную при защите", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, spd: 10 }, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, spd: 10 }, species: "dog" }],
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 3 },
           baseStats: { ...flat, hp: 80, spd: 1 },
           species: "dog",
@@ -199,14 +199,14 @@ describe("simulateCombat", () => {
     const b = makeBattle(
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 4 },
           baseStats: { ...flat, spd: 20 },
           species: "dog",
           skills: { b: "b_desperation" }
         }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 80 }, species: "dog" }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 80 }, species: "dog" }]
     )
     const st = b.state
     const p = st.units[b.players[0]!.id]!
@@ -217,10 +217,10 @@ describe("simulateCombat", () => {
 
   it("Девять жизней спасает кота с 1 HP", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 4 }, baseStats: { ...flat, atk: 50 }, species: "dog" }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 4 }, baseStats: { ...flat, atk: 50 }, species: "dog" }],
       [
         {
-          classId: "infantry_claw",
+          classId: "infantry_sword",
           pos: { x: 2, y: 3 },
           baseStats: { ...flat, hp: 20 },
           species: "cat",
@@ -233,19 +233,5 @@ describe("simulateCombat", () => {
     const out = simulateCombat(st, b.players[0]!.id, b.enemies[0]!.id, { x: 2, y: 4 })
     expect(out.strikes[0]!.miracle).toBe(true)
     expect(out.defender.hpAfter).toBe(1)
-  })
-
-  it("Репейник вешает штраф после боя", () => {
-    const b = makeBattle(
-      [{ classId: "infantry_burr", pos: { x: 2, y: 5 }, baseStats: flat, species: "dog" }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 }, baseStats: { ...flat, hp: 90 }, species: "dog" }]
-    )
-    const { state } = applyAction(b.state, {
-      type: "attack",
-      unitId: b.players[0]!.id,
-      to: { x: 2, y: 5 },
-      targetId: b.enemies[0]!.id
-    })
-    expect(state.units[b.enemies[0]!.id]!.penalties.def).toBe(-5)
   })
 })

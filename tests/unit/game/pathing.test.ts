@@ -6,7 +6,7 @@ import { makeBattle, plainTiles } from "./helpers"
 describe("moveCost", () => {
   it("заросли: пехота 2, броня 1, кавалерия нельзя, летун 1", () => {
     expect(moveCost("forest", "infantry")).toBe(2)
-    expect(moveCost("forest", "armor")).toBe(1)
+    expect(moveCost("forest", "armored")).toBe(1)
     expect(moveCost("forest", "cavalry")).toBeNull()
     expect(moveCost("forest", "flier")).toBe(1)
     expect(moveCost("forest", "infantry", true)).toBe(1)
@@ -23,11 +23,11 @@ describe("reachableTiles", () => {
   it("пехота ходит на 2, кавалерия на 3, броня на 1", () => {
     const b = makeBattle(
       [
-        { classId: "infantry_claw", pos: { x: 0, y: 7 } },
-        { classId: "cavalry_claw", pos: { x: 5, y: 7 } },
-        { classId: "armor_claw", pos: { x: 2, y: 7 } }
+        { classId: "infantry_sword", pos: { x: 0, y: 7 } },
+        { classId: "cavalry_sword", pos: { x: 5, y: 7 } },
+        { classId: "armored_sword", pos: { x: 2, y: 7 } }
       ],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 } }]
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 } }]
     )
     const inf = reachableTiles(b.state, b.state.units[b.players[0]!.id]!)
     const cav = reachableTiles(b.state, b.state.units[b.players[1]!.id]!)
@@ -41,10 +41,10 @@ describe("reachableTiles", () => {
   it("проходит сквозь союзников, но не сквозь врагов и не останавливается на занятых", () => {
     const b = makeBattle(
       [
-        { classId: "infantry_claw", pos: { x: 2, y: 7 } },
-        { classId: "infantry_claw", pos: { x: 2, y: 6 } }
+        { classId: "infantry_sword", pos: { x: 2, y: 7 } },
+        { classId: "infantry_sword", pos: { x: 2, y: 6 } }
       ],
-      [{ classId: "infantry_claw", pos: { x: 3, y: 7 } }]
+      [{ classId: "infantry_sword", pos: { x: 3, y: 7 } }]
     )
     const r = reachableTiles(b.state, b.state.units[b.players[0]!.id]!)
     expect(r.get(posKey({ x: 2, y: 6 }))?.canStop).toBe(false)
@@ -54,8 +54,8 @@ describe("reachableTiles", () => {
   })
   it("заросли заканчивают движение пехоты", () => {
     const b = makeBattle(
-      [{ classId: "infantry_claw", pos: { x: 2, y: 7 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 0 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 0 } }],
       {
         tiles: plainTiles({ "2,6": "forest" })
       }
@@ -70,8 +70,8 @@ describe("reachableTiles", () => {
 describe("зоны", () => {
   it("attackOptions и threatTiles согласованы с дальностью", () => {
     const b = makeBattle(
-      [{ classId: "infantry_slingshot", pos: { x: 2, y: 7 } }],
-      [{ classId: "infantry_claw", pos: { x: 2, y: 3 } }]
+      [{ classId: "infantry_bow", pos: { x: 2, y: 7 } }],
+      [{ classId: "infantry_sword", pos: { x: 2, y: 3 } }]
     )
     const bu = b.state.units[b.players[0]!.id]!
     const opts = attackOptions(b.state, bu)

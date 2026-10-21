@@ -1,8 +1,22 @@
 import type { Color, Difficulty, Gender, MoveType, Species, Stat, Stats } from "@game/core/types"
 import { STATS } from "@game/core/types"
 import { difficultyDef } from "@game/content/balance"
+import { isMagicWeapon } from "@game/content/weapons"
+import { CHARACTER_STAT_LABELS as L } from "@shared/character/leveling"
 
-export const STAT_LABELS: Record<Stat, string> = { hp: "HP", atk: "Atk", spd: "Spd", def: "Def", res: "Res" }
+/** Подписи боевых статов — подписи модели; атака — Str или Mag модели, без бойца — «Str/Mag». */
+export const STAT_LABELS: Record<Stat, string> = {
+  hp: L.hp,
+  atk: `${L.attack}/${L.specialAttack}`,
+  spd: L.speed,
+  def: L.defense,
+  res: L.specialDefense
+}
+
+/** Подпись атаки бойца: Mag для магии, иначе Str. */
+export function atkLabel(unit: { weaponSkill: Parameters<typeof isMagicWeapon>[0] }): string {
+  return isMagicWeapon(unit.weaponSkill) ? L.specialAttack : L.attack
+}
 export const STAT_FULL: Record<Stat, string> = {
   hp: "Здоровье",
   atk: "Атака",
@@ -24,7 +38,7 @@ export const COLOR_CSS: Record<Color, string> = {
   colorless: "var(--c-grey)"
 }
 
-export const MOVE_EMOJI: Record<MoveType, string> = { infantry: "🐾", armor: "📦", cavalry: "🤖", flier: "🎈" }
+export const MOVE_EMOJI: Record<MoveType, string> = { infantry: "🐾", armored: "📦", cavalry: "🤖", flier: "🎈" }
 
 /** Название вида с учётом пола: Кот/Кошка, Пёс/Собака, Мышь. */
 export function speciesName(unit: { species: Species, gender: Gender }): string {

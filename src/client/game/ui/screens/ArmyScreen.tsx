@@ -21,7 +21,7 @@ import { UnitAvatar } from "../components/UnitAvatar"
 import { RarityStars, WeaponBadge } from "../components/Badges"
 import { HireSheet } from "../components/HireSheet"
 import { useToast } from "../components/Toast"
-import { MOVE_EMOJI } from "../lib/format"
+import { MOVE_EMOJI, atkLabel } from "../lib/format"
 import { stagger } from "../lib/animate"
 
 /** Заполненный слот: краткая карточка бойца, тап — на экран бойца. */
@@ -59,7 +59,7 @@ function FilledSlot({ unit, index, justHired }: { unit: UnitInstance, index: num
         </div>
       </div>
       <div className="slot-foot">
-        <WeaponBadge kind={cls.weaponKind} />
+        <WeaponBadge skill={cls.weaponSkill} />
         {canLearn && <span className="chip red pop">Есть навык</span>}
         {hasClassUpgrade(unit) && <span className="chip gold pop">Новый класс</span>}
       </div>
@@ -70,7 +70,7 @@ function FilledSlot({ unit, index, justHired }: { unit: UnitInstance, index: num
           <b>{st.hp}</b>
         </span>
         <span>
-          Atk
+          {atkLabel(unit)}
           {" "}
           <b>{st.atk}</b>
         </span>
