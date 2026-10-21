@@ -10,9 +10,10 @@ Instapoke — лента спрайтов покемонов в стиле Insta
 | --- | --- |
 | [Быстрый старт](getting-started.md) | Установка, запуск, переменные окружения, npm-скрипты |
 | [Архитектура](architecture.md) | Структура каталогов, алиасы путей, поток данных |
-| [API](api.md) | Контракт `GET /api/pokemon/list` и `GET /api/pokemon/tags` |
+| [API](api.md) | Контракт `GET /api/pokemon/list`, `GET /api/pokemon/tags` и `GET /api/pokemon/abilities` |
 | [База данных](database.md) | Схема таблиц, Drizzle, заполнение данными |
 | [Данные из PokeAPI](pokemon-info.md) | Очередь `npm run pokemon:info`: загрузка типов, способностей и характеристик покемонов |
+| [Способности](abilities.md) | Таблица `ability`, связь по имени через `pokemon_info.abilities`, очередь `npm run ability:info`, API `GET /api/pokemon/abilities` |
 | [Лента](feed.md) | Виртуализация, бесконечная подгрузка, фильтр по тегам, панель настроек |
 | [PWA](pwa.md) | Манифест, иконки, баннер установки, service worker |
 | [Тесты](testing.md) | Unit- и интеграционные тесты, тестовая БД |

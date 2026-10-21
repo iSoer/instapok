@@ -67,6 +67,7 @@ Zod schemas are the single source of truth. The list route `safeParse`s incoming
 API surface:
 - `GET /api/pokemon/list?page=<0-based>&limit=<n>&tags=<uuid>&tags=<uuid>` → `{ data: ListItem[], pagination: { count, total } }`. `count` = items in this page, `total` = all items matching the filter.
 - `GET /api/pokemon/tags` → `{ data: { id, name }[] }`. Plain `db.select()`, no response validation.
+- `GET /api/pokemon/abilities` → `{ data: { name, sourceId, externalId, displayName, effect, shortEffect, flavorText, generation, isMainSeries }[] }`, every downloaded ability; `name` is the key (the values in `pokemon_info.abilities`). Response validated with `abilitiesResponseSchema`.
 
 **List route** (`app/api/pokemon/list/route.ts` → `src/server/db/queries/listPokemon.ts`):
 - `tags` is read with `searchParams.getAll` (repeated keys; `urlWithParams` serializes arrays that way). The shared `tagsParam` preprocess drops empty values (the client sends `tags=` when nothing is selected → no filter), dedupes, then requires UUIDs, max `MAX_TAGS` (50). A non-UUID value is a 400, never "no filter".
@@ -101,7 +102,7 @@ Image URLs are **not** returned by the API. `page.tsx` derives them from `name`:
 - `connection/db.ts` also exports `dbClear` (a second instance with no schema); nothing uses it.
 - `drizzle.config.ts` sets `out: ./src/server/db/generated`, but that directory does not exist — schema changes reach the DB only through `drizzle-kit push` (via `npm run init`).
 
-Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_at`, nullable `info_id` FK → `pokemon_info`, set null), `tags` (unique `name`), `pokemon_tags` (composite PK, cascade deletes), `pokemon_info` (data from an external service, unique `(source_id, external_id)`; `source_id` codes are `INFO_SOURCES` in `src/server/pokemon-info/sources.ts`, `0` = PokeAPI; filled by `npm run pokemon:info`, see `docs/pokemon-info.md`). One schema file per table in `src/server/db/schema/`, re-exported from the barrel.
+Tables: `pokemon` (uuid pk, `name`, `width`, `height`, nullable `alt`, `created_at`, nullable `info_id` FK → `pokemon_info`, set null), `tags` (unique `name`), `pokemon_tags` (composite PK, cascade deletes), `pokemon_info` (data from an external service, unique `(source_id, external_id)`; `source_id` codes are `INFO_SOURCES` in `src/server/pokemon-info/sources.ts`, `0` = PokeAPI; filled by `npm run pokemon:info`, see `docs/pokemon-info.md`), `ability` (unique `(source_id, external_id)` and `(source_id, name)`; filled by `npm run ability:info`, see `docs/abilities.md`). There is no ability join table: `pokemon_info.abilities text[]` holds ability names in slot order, and `(source_id, name)` is the link key into `ability` (no FK, no Drizzle relation); `GET /api/pokemon/abilities` returns them all keyed by `name`. One schema file per table in `src/server/db/schema/`, re-exported from the barrel.
 
 ## Conventions and gotchas
 

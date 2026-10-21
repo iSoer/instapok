@@ -18,6 +18,7 @@ export const pokemonInfoSchema = pgTable("pokemon_info", {
   externalId: integer("external_id").notNull(),
   name: text("name").notNull(),
   types: text("types").array().notNull(),
+  // ability.name values of the same source, in slot order; no FK, arrays cannot have one
   abilities: text("abilities").array().notNull(),
   // PokeAPI units: decimetres and hectograms
   heightDm: integer("height_dm").notNull(),

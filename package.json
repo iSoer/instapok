@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "init": "tsx src/server/scripts/init",
     "pokemon:info": "tsx src/server/scripts/fetchPokemonInfo",
+    "ability:info": "tsx src/server/scripts/fetchAbilityInfo",
     "icons": "tsx src/server/scripts/generatePwaIcons"
   },
   "dependencies": {

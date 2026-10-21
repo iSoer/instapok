@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { fetchPokemonInfo, PokeapiPermanentError } from "@/server/pokemon-info/pokeapi"
+import { fetchAbilityInfo, fetchPokemonInfo, PokeapiPermanentError } from "@/server/pokemon-info/pokeapi"
 import { parseIds } from "@/server/pokemon-info/parseIds"
 import { INFO_SOURCES } from "@/server/pokemon-info/sources"
 
@@ -12,8 +12,8 @@ const PIKACHU = {
   base_experience: 112,
   types: [{ slot: 1, type: { name: "electric", url: "" } }],
   abilities: [
-    { is_hidden: true, slot: 3, ability: { name: "lightning-rod", url: "" } },
-    { is_hidden: false, slot: 1, ability: { name: "static", url: "" } }
+    { is_hidden: true, slot: 3, ability: { name: "lightning-rod", url: "https://pokeapi.co/api/v2/ability/31/" } },
+    { is_hidden: false, slot: 1, ability: { name: "static", url: "https://pokeapi.co/api/v2/ability/9/" } }
   ],
   stats: [
     { base_stat: 35, effort: 0, stat: { name: "hp", url: "" } },
@@ -74,6 +74,67 @@ describe("fetchPokemonInfo", () => {
 
     expect(error).toBeInstanceOf(Error)
     expect(error).not.toBeInstanceOf(PokeapiPermanentError)
+  })
+})
+
+// Trimmed real response of GET /api/v2/ability/static/
+const STATIC = {
+  id: 9,
+  name: "static",
+  is_main_series: true,
+  generation: { name: "generation-iii", url: "" },
+  names: [
+    { name: "Statik", language: { name: "de", url: "" } },
+    { name: "Static", language: { name: "en", url: "" } }
+  ],
+  effect_entries: [
+    { effect: "Statique", short_effect: "Paralyse", language: { name: "fr", url: "" } },
+    {
+      effect: "Whenever a move makes contact with this Pokémon,\nthe move's user has a 30% chance of being paralyzed.",
+      short_effect: "Has a 30% chance of paralyzing attacking Pokémon on contact.",
+      language: { name: "en", url: "" }
+    }
+  ],
+  flavor_text_entries: [
+    { flavor_text: "Old text", language: { name: "en", url: "" }, version_group: { name: "ruby-sapphire", url: "" } },
+    { flavor_text: "Contact may\fcause paralysis.", language: { name: "en", url: "" }, version_group: { name: "sv", url: "" } }
+  ],
+  effect_changes: [],
+  pokemon: []
+}
+
+describe("fetchAbilityInfo", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("requests the ability by name and keeps English texts with normalized whitespace", async () => {
+    const fetchSpy = mockFetch(200, STATIC)
+
+    expect(await fetchAbilityInfo("static")).toEqual({
+      sourceId: INFO_SOURCES.pokeapi,
+      externalId: 9,
+      name: "static",
+      displayName: "Static",
+      effect: "Whenever a move makes contact with this Pokémon, the move's user has a 30% chance of being paralyzed.",
+      shortEffect: "Has a 30% chance of paralyzing attacking Pokémon on contact.",
+      flavorText: "Contact may cause paralysis.",
+      generation: "generation-iii",
+      isMainSeries: true
+    })
+    expect(fetchSpy.mock.calls[0][0]).toBe("https://pokeapi.co/api/v2/ability/static/")
+  })
+
+  it("returns null texts when there are no English entries", async () => {
+    mockFetch(200, { ...STATIC, names: [], effect_entries: [], flavor_text_entries: [], is_main_series: false })
+
+    expect(await fetchAbilityInfo("9")).toMatchObject({ displayName: null, effect: null, shortEffect: null, flavorText: null })
+  })
+
+  it("throws a permanent error for an unknown ability", async () => {
+    mockFetch(404)
+
+    await expect(fetchAbilityInfo("nope")).rejects.toBeInstanceOf(PokeapiPermanentError)
   })
 })
 

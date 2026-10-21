@@ -1,4 +1,5 @@
 export * from "./pokemonInfoSchema"
+export * from "./abilitySchema"
 export * from "./pokemonSchema"
 export * from "./tagsSchema"
 export * from "./pokemonTagsSchema"

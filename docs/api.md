@@ -1,6 +1,6 @@
 # API
 
-Два route handler'а в `src/app/api/pokemon/`. Контракт описан Zod-схемами в `src/shared/api/schema/` (см. [Архитектура](architecture.md#единый-источник-правды-для-контракта)).
+Три route handler'а в `src/app/api/pokemon/`. Контракт описан Zod-схемами в `src/shared/api/schema/` (см. [Архитектура](architecture.md#единый-источник-правды-для-контракта)).
 
 ## `GET /api/pokemon/list`
 
@@ -92,12 +92,51 @@ curl 'localhost:3000/api/pokemon/list?page=0&limit=20&tags=not-a-uuid'   # 400
 
 Обычный `db.select()` без валидации ответа. При ошибке БД — 500 `{ "error": "Error when collecting tags" }`.
 
+## `GET /api/pokemon/abilities`
+
+Все загруженные способности покемонов одним списком, без пагинации и параметров. Отсортированы по `sourceId`, затем по `name`. Схема — `abilitiesResponseSchema` в `src/shared/api/schema/pokemon/abilities.ts`; ответ валидируется перед отправкой, как в `list`.
+
+```json
+{
+  "data": [
+    {
+      "name": "static",
+      "sourceId": 0,
+      "externalId": 9,
+      "displayName": "Static",
+      "effect": "Whenever a move makes contact with this Pokémon, …",
+      "shortEffect": "Has a 30% chance of paralyzing attacking Pokémon on contact.",
+      "flavorText": "The Pokémon is charged with static electricity …",
+      "generation": "generation-iii",
+      "isMainSeries": true
+    }
+  ]
+}
+```
+
+- `name` — ключ: те же строки, что лежат в `pokemon_info.abilities`. Уникален внутри источника, поэтому способность покемона ищется по паре `(sourceId, name)`.
+- `sourceId` — источник, `0` — PokeAPI.
+- `externalId` — ID способности в источнике, справочно. UUID строки таблицы наружу не отдаётся.
+- `displayName`, `effect`, `shortEffect`, `flavorText` — английские тексты, могут быть `null`.
+
+Список содержит только то, что загружено в таблицу `ability` (`npm run ability:info`, см. [Способности](abilities.md)). Пустая таблица — `{ "data": [] }`.
+
+| Статус | Когда | Тело |
+| --- | --- | --- |
+| 500 | Ответ не прошёл собственную валидацию | `{ "error": "Internal Server Error: Invalid response format", "details": … }` |
+| 500 | Ошибка БД (подробности только в серверном логе) | `{ "error": "Error when collecting abilities" }` |
+
+```bash
+curl 'localhost:3000/api/pokemon/abilities'
+```
+
 ## Клиентская сторона
 
 - `src/shared/api/fetcher.ts` — `fetchFn`, тонкая обёртка над `fetch`: выбрасывает ошибку при `!response.ok` и возвращает разобранный JSON.
 - `src/client/api/helpers/urlWithParams.ts` — собирает URL; массивы сериализуются повторяющимися ключами (`tags=a&tags=b`), пустой массив — отсутствием ключа.
 - `src/client/api/hooks/usePokemonBank.ts` — `useSWRInfinite` для ленты (см. [Лента](feed.md#загрузка-данных)).
 - `src/client/api/hooks/usePokemonTags.ts` — `useSWR` для списка тегов.
+- `src/client/api/hooks/usePokemonAbilities.ts` — `useSWR` для списка способностей. Сейчас нигде не используется: лента пока не отдаёт способности покемонов.
 
 ## Неиспользуемый код
 

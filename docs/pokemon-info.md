@@ -78,7 +78,7 @@ PokeAPI просит не нагружать его без необходимо�
 | `external_id` | `integer` | `id` — номер покемона в этом сервисе |
 | `name` | `text` | `name` (`pikachu`, `terapagos-stellar`) |
 | `types` | `text[]` | `types[].type.name` в порядке `slot` |
-| `abilities` | `text[]` | `abilities[].ability.name` в порядке `slot` (скрытая способность тоже входит) |
+| `abilities` | `text[]` | `abilities[].ability.name` в порядке `slot`; скрытая способность, если есть, последняя. Это ключ связи с `ability.name` того же источника, см. [Способности](abilities.md) |
 | `height_dm` | `integer` | `height`, в дециметрах |
 | `weight_hg` | `integer` | `weight`, в гектограммах |
 | `base_experience` | `integer`, nullable | `base_experience` (у некоторых форм `null`) |

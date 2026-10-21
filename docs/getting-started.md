@@ -47,6 +47,7 @@ npm start
 | `test:watch` | Vitest в режиме наблюдения. |
 | `init` | Пересоздание данных в БД (см. [База данных](database.md#заполнение-данными)). |
 | `pokemon:info` | Очередь загрузки данных покемонов из PokeAPI (см. [Данные из PokeAPI](pokemon-info.md)). |
+| `ability:info` | Очередь загрузки способностей из PokeAPI и их связей с покемонами (см. [Способности](abilities.md)). |
 | `icons` | Одноразовая генерация PWA-иконок в `public/icons/`. |
 
 Проверка типов без сборки: `npx tsc --noEmit` (корневой проект) и `npm run typecheck:sw` (service worker).

@@ -22,6 +22,10 @@ PostgreSQL 17 (`docker-compose.yml`) и Drizzle ORM **0.45** с `drizzle-kit` 0.
 
 Параметры покемона из внешнего сервиса: одна строка на пару `(source_id, external_id)`, на неё ссылаются все спрайты покемона (обычный, shiny, формы). `source_id = 0` — PokeAPI. Колонки и коды источников описаны в [Данные из PokeAPI](pokemon-info.md#что-записывается-в-таблицу).
 
+### `ability`
+
+Справочник способностей, уникален по `(source_id, external_id)` и `(source_id, name)`. Таблицы связей нет: покемон хранит имена своих способностей массивом `pokemon_info.abilities`, а имя (`ability.name` того же `source_id`) служит ключом. Внешнего ключа у массива нет. Подробно — в [Способности](abilities.md).
+
 ### `tags`
 
 | Колонка | Тип | Примечание |
@@ -54,7 +58,7 @@ PostgreSQL 17 (`docker-compose.yml`) и Drizzle ORM **0.45** с `drizzle-kit` 0.
 `npm run init` (`src/server/scripts/init.ts`) — **деструктивная** операция:
 
 1. `npx drizzle-kit push` — применяет схему;
-2. `TRUNCATE` таблиц `pokemon`, `pokemon_tags` и `tags` (`pokemon_info` не трогается);
+2. `TRUNCATE` таблиц `pokemon`, `pokemon_tags` и `tags` (`pokemon_info` и `ability` не трогаются);
 3. создаёт единственный тег `shiny`;
 4. для каждого `*.webp` в `public/uploads/pokemon/images/` вставляет строку в `pokemon`: размеры читаются через `sharp`, `alt` — числовая часть имени файла. Файлы `N.shiny.webp` получают тег `shiny`.
 

@@ -15,7 +15,9 @@ export type Fixture = {
 export const resetDatabase = async () => {
   assertTestDatabase(process.env.DATABASE_URL)
 
-  await db.execute(sql`TRUNCATE TABLE pokemon_tags, pokemon, pokemon_info, tags RESTART IDENTITY CASCADE`)
+  await db.execute(sql`
+    TRUNCATE TABLE pokemon_tags, pokemon, ability, pokemon_info, tags RESTART IDENTITY CASCADE
+  `)
 }
 
 /**

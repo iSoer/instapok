@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { PokemonStats } from "@schema/pokemonInfoSchema"
-import { INFO_SOURCES, type PokemonInfo } from "./sources"
+import { INFO_SOURCES, type AbilityInfo, type PokemonInfo } from "./sources"
 
 export const POKEAPI_URL = "https://pokeapi.co/api/v2"
 
@@ -29,7 +29,7 @@ const STAT_KEYS: Record<string, keyof PokemonStats> = {
   "speed": "speed"
 }
 
-/** The request can't succeed on retry (unknown id, bad payload) */
+/** The request can't succeed on retry (unknown id or name, bad payload) */
 export class PokeapiPermanentError extends Error {
   readonly retryable = false
 }
@@ -60,30 +60,76 @@ export const toPokemonInfo = (raw: z.infer<typeof pokeapiPokemonSchema>): Pokemo
   }
 }
 
-export const fetchPokemonInfo = async (id: number, signal?: AbortSignal): Promise<PokemonInfo> => {
+/** GETs `path`, validates the body with `schema`; `label` names the resource in errors ("pokemon #25") */
+const requestPokeapi = async <T>(path: string, schema: z.ZodType<T>, label: string, signal?: AbortSignal): Promise<T> => {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 
-  const response = await fetch(`${POKEAPI_URL}/pokemon/${id}/`, {
+  const response = await fetch(`${POKEAPI_URL}/${path}/`, {
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     headers: { accept: "application/json" }
   })
 
   if (response.status === 404) {
-    throw new PokeapiPermanentError(`PokeAPI has no pokemon #${id}`)
+    throw new PokeapiPermanentError(`PokeAPI has no ${label}`)
   }
 
   // 429 and 5xx are worth retrying, other 4xx are not
   if (!response.ok) {
-    const message = `PokeAPI responded ${response.status} for pokemon #${id}`
+    const message = `PokeAPI responded ${response.status} for ${label}`
 
     throw response.status === 429 || response.status >= 500 ? new Error(message) : new PokeapiPermanentError(message)
   }
 
-  const parsed = pokeapiPokemonSchema.safeParse(await response.json())
+  const parsed = schema.safeParse(await response.json())
 
   if (!parsed.success) {
-    throw new PokeapiPermanentError(`Unexpected PokeAPI payload for pokemon #${id}: ${parsed.error.message}`)
+    throw new PokeapiPermanentError(`Unexpected PokeAPI payload for ${label}: ${parsed.error.message}`)
   }
 
-  return toPokemonInfo(parsed.data)
+  return parsed.data
 }
+
+export const fetchPokemonInfo = async (id: number, signal?: AbortSignal): Promise<PokemonInfo> =>
+  toPokemonInfo(await requestPokeapi(`pokemon/${id}`, pokeapiPokemonSchema, `pokemon #${id}`, signal))
+
+const localized = z.object({ language: namedResource })
+
+const pokeapiAbilitySchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  is_main_series: z.boolean(),
+  generation: namedResource,
+  names: z.array(localized.extend({ name: z.string() })),
+  effect_entries: z.array(localized.extend({ effect: z.string(), short_effect: z.string() })),
+  flavor_text_entries: z.array(localized.extend({ flavor_text: z.string() }))
+})
+
+const LANGUAGE = "en"
+
+const inLanguage = <T extends z.infer<typeof localized>>(entries: T[]) =>
+  entries.filter(entry => entry.language.name === LANGUAGE)
+
+// Flavor texts keep the game's line breaks and form feeds
+const normalizeText = (text: string) => text.replace(/\s+/g, " ").trim()
+
+export const toAbilityInfo = (raw: z.infer<typeof pokeapiAbilitySchema>): AbilityInfo => {
+  const effect = inLanguage(raw.effect_entries)[0]
+  // Entries go from the oldest game to the newest
+  const flavorText = inLanguage(raw.flavor_text_entries).at(-1)
+
+  return {
+    sourceId: INFO_SOURCES.pokeapi,
+    externalId: raw.id,
+    name: raw.name,
+    displayName: inLanguage(raw.names)[0]?.name ?? null,
+    effect: effect ? normalizeText(effect.effect) : null,
+    shortEffect: effect ? normalizeText(effect.short_effect) : null,
+    flavorText: flavorText ? normalizeText(flavorText.flavor_text) : null,
+    generation: raw.generation.name,
+    isMainSeries: raw.is_main_series
+  }
+}
+
+/** `ability` is the PokeAPI name (`static`) or id */
+export const fetchAbilityInfo = async (ability: string, signal?: AbortSignal): Promise<AbilityInfo> =>
+  toAbilityInfo(await requestPokeapi(`ability/${ability}`, pokeapiAbilitySchema, `ability "${ability}"`, signal))
