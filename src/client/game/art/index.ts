@@ -18,7 +18,7 @@ export {
   type CritterPart
 } from "./critter"
 export { CLASS_OUTFITS, outfitOf, type Outfit } from "./outfits"
-export { backdropSvg, BACKDROP } from "./backdrop"
+export { backdropSvg, backdropLayersSvg, BACKDROP, type BackdropLayers } from "./backdrop"
 export { tileSvg, TILE_SIZE, TILE_FRAME_COUNT } from "./tile"
 export { svgToImage, svgDataUri, clearRasterCache } from "./raster"
 export { FUR_ART, EYE_ART, furArt, eyeArt, shade, hex } from "./palettes"

@@ -60,6 +60,9 @@ interface Particle {
   anchor: number
   size: number
   baseAlpha: number
+  /** Масштаб после setDisplaySize: от него считается «переворот» листа. */
+  sx: number
+  sy: number
 }
 
 export interface WeatherOptions {
@@ -124,6 +127,8 @@ export class WeatherLayer {
     const tex = KIND_TEX[this.kind]
     for (let i = 0; i < this.maxCount; i++) {
       const img = scene.add.image(0, 0, tex).setDepth(this.depth).setVisible(false)
+      // Угольки и пылинки светятся
+      if (this.kind === "embers" || this.kind === "motes") img.setBlendMode(Phaser.BlendModes.ADD)
       const p: Particle = {
         img,
         vx: 0,
@@ -134,7 +139,9 @@ export class WeatherLayer {
         life: 0,
         anchor: i % Math.max(1, this.anchors.length),
         size: 1,
-        baseAlpha: 1
+        baseAlpha: 1,
+        sx: 1,
+        sy: 1
       }
       this.pool.push(p)
       // Стартовое распределение по всему экрану, чтобы погода не «включалась» с края.
@@ -185,11 +192,12 @@ export class WeatherLayer {
     this.tint(p)
     switch (this.kind) {
       case "snow": {
-        p.size = 2 + Math.random() * 3
+        // Глубина: крупные хлопья ближе — быстрее и прозрачнее, мелкие дальше — медленнее
+        p.size = 1.5 + Math.random() * Math.random() * 6
         img.setDisplaySize(p.size * 2, p.size * 2)
-        p.baseAlpha = 0.7 + Math.random() * 0.25
+        p.baseAlpha = p.size > 4.5 ? 0.55 : 0.75 + Math.random() * 0.2
         img.setAlpha(p.baseAlpha)
-        p.vy = 25 + Math.random() * 20
+        p.vy = 14 + p.size * 9 + Math.random() * 8
         p.vx = 0
         p.spin = 0
         img.setPosition(Math.random() * w, anywhere ? Math.random() * h : -10)
@@ -200,6 +208,8 @@ export class WeatherLayer {
         const leaf = this.kind === "leaves"
         p.size = leaf ? 8 + Math.random() * 4 : 6 + Math.random() * 3
         img.setDisplaySize(p.size, p.size * (leaf ? 0.66 : 0.75))
+        p.sx = img.scaleX
+        p.sy = img.scaleY
         p.baseAlpha = leaf ? 0.9 : 0.85
         img.setAlpha(p.baseAlpha)
         p.vy = leaf ? 40 + Math.random() * 30 : 20 + Math.random() * 15
@@ -299,6 +309,10 @@ export class WeatherLayer {
           img.x += (p.vx + Math.sin(p.phase + p.t * 2) * (this.kind === "leaves" ? 30 : 22)) * dt
           img.y += p.vy * dt
           img.angle += p.spin * dt
+          // Лист переворачивается в полёте: сжатие по одной оси и смена оттенка «изнанки»
+          const flip = Math.cos(p.phase + p.t * (this.kind === "leaves" ? 3.4 : 2.6))
+          img.setScale(p.sx, p.sy * (0.25 + 0.75 * Math.abs(flip)))
+          img.setAlpha(p.baseAlpha * (flip < 0 ? 0.75 : 1))
           if (img.y > h + 14 || img.x > w + 20 || img.x < -20) this.recycle(p, i, target)
           break
         }

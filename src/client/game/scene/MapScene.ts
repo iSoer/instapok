@@ -1,6 +1,6 @@
 import Phaser from "phaser"
 import type { BattleState, Pos, TerrainId } from "@game/core/types"
-import { MAP_H, MAP_W, posKey } from "@game/core/types"
+import { MAP_H, MAP_W, inBounds, posKey } from "@game/core/types"
 import { terrainAt, unitAt } from "@game/core/battle/query"
 import { biomeDef } from "@game/content/biomes"
 import { $save } from "@game/state/save"
@@ -24,14 +24,26 @@ import { UnitView } from "./UnitView"
 import { actorFlash, bloodBurst, bloodDecal, confettiRain, debrisBurst, sceneAlive, tween } from "./fx"
 import { haptic } from "@game/platform/haptics"
 import {
-  ensureTileTextures,
   ensureUnitTextures,
   hasTexture,
   tileFrameCount,
-  tileTexKey,
   withTimeout
 } from "./svgTextures"
 import { WeatherLayer } from "./weather"
+import { AmbientLayer } from "./ambient"
+import {
+  ENV,
+  SHORE_FRAMES,
+  edgeKey,
+  ensureEnvTextures,
+  ensureEnvTileTextures,
+  envTileKey,
+  groundKey,
+  tileVariantAt,
+  wallImpactFx
+} from "./env"
+import { isTallTerrain, waterFillsTile } from "@game/art/tile"
+import { clearGoreStains } from "./gore"
 
 export const MAP_SCENE_KEY = "Map"
 
@@ -86,6 +98,7 @@ export class MapScene extends Phaser.Scene {
     frames: number
     phase: number
     frame: number
+    variant: number
   }[] = []
 
   private tileTimer: Phaser.Time.TimerEvent | null = null
@@ -93,6 +106,17 @@ export class MapScene extends Phaser.Scene {
   private tileBiome = ""
   private weather: WeatherLayer | null = null
   private weatherBiome = ""
+  /* ---- Окружение: атмосфера, края клеток, стены, подсветка ---- */
+  private ambient: AmbientLayer | null = null
+  /** Земля биома вокруг поля: затемнённая фактура равнины на весь экран. */
+  private groundBg: Phaser.GameObjects.TileSprite | null = null
+  private wallImgs = new Map<string, Phaser.GameObjects.Image>()
+  private shoreImgs: { img: Phaser.GameObjects.Image, phase: number }[] = []
+  private dangerLayer!: Phaser.GameObjects.Container
+  private dangerPool: Phaser.GameObjects.TileSprite[] = []
+  private threatPool: Phaser.GameObjects.Image[] = []
+  private pawPool: Phaser.GameObjects.Image[] = []
+  private pawCount = 0
   private unsubSave: (() => void) | null = null
   private unsubUi: (() => void) | null = null
   private pendingSync = false
@@ -122,6 +146,7 @@ export class MapScene extends Phaser.Scene {
 
   create(): void {
     ensureTextures(this)
+    ensureEnvTextures(this)
     this.tileLayer = this.add.container(0, 0).setDepth(0)
     this.tilesG = this.add.graphics().setDepth(0.2)
     this.decalLayer = this.add.container(0, 0).setDepth(1)
@@ -129,6 +154,9 @@ export class MapScene extends Phaser.Scene {
     this.threatG = this.add.graphics().setDepth(1.85)
     this.hlLayer = this.add.container(0, 0).setDepth(2)
     this.pathG = this.add.graphics().setDepth(3)
+    this.dangerLayer = this.add.container(0, 0).setDepth(1.8)
+    // Пульс подсветки клеток, бегущая штриховка опасности, следы лап на пути, пена у берега
+    this.events.on(Phaser.Scenes.Events.UPDATE, this.tickEnv, this)
     // Пульс зоны опасности: графика рисуется в полную силу, а её alpha качается 0.55 ↔ 1.
     this.pulseTweens.push(
       this.tweens.add({
@@ -204,7 +232,7 @@ export class MapScene extends Phaser.Scene {
   /** Текстуры тайлов биома и миниатюр живых юнитов (размер карты). */
   private preloadArt(st: BattleState | undefined): Promise<unknown> {
     if (!st) return Promise.resolve()
-    const jobs: Promise<unknown>[] = [ensureTileTextures(this, st.map.biomeId)]
+    const jobs: Promise<unknown>[] = [ensureEnvTileTextures(this, st.map.biomeId)]
     for (const bu of Object.values(st.units)) {
       if (!bu.alive) continue
       const unit = st.roster[bu.unitId]
@@ -246,6 +274,11 @@ export class MapScene extends Phaser.Scene {
     this.weather?.destroy()
     this.weather = null
     this.weatherBiome = ""
+    this.ambient?.destroy()
+    this.ambient = null
+    this.groundBg?.destroy()
+    this.groundBg = null
+    this.events.off(Phaser.Scenes.Events.UPDATE, this.tickEnv, this)
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this)
   }
 
@@ -556,7 +589,6 @@ export class MapScene extends Phaser.Scene {
       view.setHp(bu.hp, bu.maxHp)
       view.setCd(bu.specialCd)
       view.setActed(bu.acted && st.phase === bu.side)
-      view.setAlpha(bu.acted && st.phase === bu.side ? 0.45 : 1)
     }
     for (const [id, view] of this.units) {
       if (!alive.has(id)) {
@@ -595,14 +627,10 @@ export class MapScene extends Phaser.Scene {
 
   addDecal(pos: Pos, kind: "splat" | "pool", seed: number): void {
     const c = this.center(pos)
-    const img = bloodDecal(
-      this,
-      c.x + (kind === "splat" ? ((seed % 7) - 3) * 2 : 0),
-      c.y + (kind === "splat" ? ((seed % 5) - 2) * 2 : this.tile * 0.15),
-      this.tile,
-      kind,
-      seed
-    )
+    // Клякса — со случайным сдвигом внутри клетки; лужа — под телом и растекается
+    const jx = kind === "splat" ? (((seed * 37) % 11) - 5) * this.tile * 0.035 : 0
+    const jy = kind === "splat" ? (((seed * 53) % 9) - 4) * this.tile * 0.03 : this.tile * 0.15
+    const img = bloodDecal(this, c.x + jx, c.y + jy, this.tile, kind, seed)
     this.decalLayer.add(img)
     if (kind === "pool") this.decalCount++
   }
@@ -613,18 +641,23 @@ export class MapScene extends Phaser.Scene {
     const t = this.wallTexts.get(key)
     if (t) t.setText(hp > 0 ? String(hp) : "")
     const c = this.center(pos)
+    const st = $save.get().battle
+    const wallColor = st ? biomeDef(st.map.biomeId).colors.wall_breakable : 0xa1887f
     if (hp > 0) {
       this.drawCrack(pos, hp)
       debrisBurst(this, c.x, c.y, this.tile, 8, speed)
+      wallImpactFx(this, c.x, c.y, this.tile, wallColor, false, speed)
     }
     else {
       this.cracks.get(key)?.destroy()
       this.cracks.delete(key)
       debrisBurst(this, c.x, c.y, this.tile, 18, speed)
+      wallImpactFx(this, c.x, c.y, this.tile, wallColor, true, speed)
+      this.cameras.main.shake(140 / speed, 0.006)
     }
   }
 
-  /** Трещина на тайле стены; при HP 1 — длиннее и с ответвлениями. */
+  /** Трещины на тайле стены: рваная линия с бликом по кромке; чем меньше HP, тем больше ветвей. */
   private drawCrack(pos: Pos, hp: number): void {
     const key = posKey(pos)
     let g = this.cracks.get(key)
@@ -635,23 +668,30 @@ export class MapScene extends Phaser.Scene {
     g.clear()
     const o = tileOrigin(this.layout, pos)
     const t = this.layout.tile
-    g.lineStyle(Math.max(2, t * 0.045), 0x1a1a1a, 0.85)
-    g.beginPath()
-    g.moveTo(o.x + t * 0.45, o.y + t * 0.05)
-    g.lineTo(o.x + t * 0.55, o.y + t * 0.3)
-    g.lineTo(o.x + t * 0.42, o.y + t * 0.48)
-    g.lineTo(o.x + t * 0.58, o.y + t * 0.72)
-    g.lineTo(o.x + t * 0.5, o.y + t * 0.95)
-    g.strokePath()
-    if (hp <= 1) {
-      g.beginPath()
-      g.moveTo(o.x + t * 0.42, o.y + t * 0.48)
-      g.lineTo(o.x + t * 0.2, o.y + t * 0.58)
-      g.lineTo(o.x + t * 0.12, o.y + t * 0.8)
-      g.moveTo(o.x + t * 0.55, o.y + t * 0.3)
-      g.lineTo(o.x + t * 0.78, o.y + t * 0.36)
-      g.lineTo(o.x + t * 0.9, o.y + t * 0.2)
-      g.strokePath()
+    let seed = (pos.x * 73 + pos.y * 151 + 7) >>> 0
+    const rnd = (): number => {
+      seed = (Math.imul(seed ^ (seed >>> 13), 1103515245) + 12345) >>> 0
+      return (seed % 1000) / 1000
+    }
+    const branches = hp <= 1 ? 5 : 3
+    for (let b = 0; b < branches; b++) {
+      const pts: { x: number, y: number }[] = []
+      let x = o.x + t * (0.3 + rnd() * 0.4)
+      let y = o.y + t * (b === 0 ? 0.04 : 0.2 + rnd() * 0.5)
+      pts.push({ x, y })
+      const steps = b === 0 ? 6 : 3
+      const dir = rnd() < 0.5 ? -1 : 1
+      for (let i = 0; i < steps; i++) {
+        x += (b === 0 ? (rnd() - 0.5) * 0.24 : dir * (0.08 + rnd() * 0.1)) * t
+        y += (b === 0 ? 0.15 : (rnd() - 0.3) * 0.16) * t
+        pts.push({ x: Phaser.Math.Clamp(x, o.x + 2, o.x + t - 2), y: Phaser.Math.Clamp(y, o.y + 2, o.y + t - 2) })
+      }
+      const w = Math.max(1.5, t * (b === 0 ? 0.05 : 0.032))
+      // Светлая кромка, затем тёмная щель поверх со сдвигом
+      g.lineStyle(w * 0.7, 0xffffff, 0.35)
+      g.strokePoints(pts.map(p => ({ x: p.x + 1, y: p.y + 1 })), false)
+      g.lineStyle(w, 0x140d08, 0.9)
+      g.strokePoints(pts, false)
     }
   }
 
@@ -746,10 +786,27 @@ export class MapScene extends Phaser.Scene {
   }
 
   shakeTile(pos: Pos): void {
-    const t = this.wallTexts.get(posKey(pos))
-    if (!t) return
-    const x = t.x
-    this.tweens.add({ targets: t, x: x + 3, duration: 40, yoyo: true, repeat: 3, onComplete: () => t.setX(x) })
+    const key = posKey(pos)
+    const t = this.wallTexts.get(key)
+    if (t) {
+      const x = t.x
+      this.tweens.add({ targets: t, x: x + 3, duration: 40, yoyo: true, repeat: 3, onComplete: () => t.setX(x) })
+    }
+    // Сам тайл стены вздрагивает от удара
+    const img = this.wallImgs.get(key)
+    if (img && img.scene) {
+      const x = img.x
+      const y = img.y
+      this.tweens.add({
+        targets: img,
+        x: x + this.tile * 0.05,
+        y: y - this.tile * 0.02,
+        duration: 45,
+        yoyo: true,
+        repeat: 2,
+        onComplete: () => img.setPosition(x, y)
+      })
+    }
   }
 
   /* ---------- Рисование ---------- */
@@ -767,18 +824,32 @@ export class MapScene extends Phaser.Scene {
     for (const g of this.cracks.values()) g.destroy()
     this.cracks.clear()
     this.wallHp.clear()
+    this.wallImgs.clear()
+    this.shoreImgs = []
     this.stopTileAnimations()
     this.tileBiome = st.map.biomeId
     const l = this.layout
+    const seed = st.map.seed
     const flyAnchors: { x: number, y: number }[] = []
+    const waterSpots: { x: number, y: number }[] = []
+    const plainSpots: { x: number, y: number }[] = []
+    const tallAt = (p: Pos): boolean => inBounds(p) && isTallTerrain(terrainAt(st, p))
+    const waterAt = (p: Pos): boolean => !inBounds(p) || terrainAt(st, p) === "water"
+    const shoreKey = edgeKey(biome.id, "shore", 0)
+    const shadeKey = edgeKey(biome.id, "shade")
+    const rubbleKey = edgeKey(biome.id, "rubble")
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const pos = { x, y }
         const terrain: TerrainId = terrainAt(st, pos)
         const o = tileOrigin(l, pos)
-        const texKey = tileTexKey(st.map.biomeId, terrain, 0)
+        const c = tileCenter(l, pos)
+        const variant = tileVariantAt(terrain, x, y, seed)
+        const texKey = envTileKey(st.map.biomeId, terrain, 0, variant)
         const hasArt = hasTexture(this, texKey)
-        if (terrain === "forest" || terrain === "cover") flyAnchors.push(tileCenter(l, pos))
+        if (terrain === "forest" || terrain === "cover") flyAnchors.push(c)
+        if (terrain === "water") waterSpots.push(c)
+        if (terrain === "plain") plainSpots.push(c)
         if (hasArt) {
           // Кусты (и ели зимнего парка) качаются от основания: якорь внизу по центру.
           const sway = terrain === "forest" || (terrain === "mountain" && st.map.biomeId === "winter_park")
@@ -789,15 +860,17 @@ export class MapScene extends Phaser.Scene {
                 .setDisplaySize(l.tile, l.tile)
             : this.add.image(o.x, o.y, texKey).setOrigin(0, 0).setDisplaySize(l.tile, l.tile)
           this.tileLayer.add(img)
+          if (terrain === "wall" || terrain === "wall_breakable") this.wallImgs.set(posKey(pos), img)
           const frames = tileFrameCount(terrain)
           const phase = ((x * 73 + y * 151) % 997) * 3 // детерминированный сдвиг фазы, мс
-          if (frames > 1) this.animTiles.push({ img, terrain, frames, phase, frame: 0 })
+          if (frames > 1) this.animTiles.push({ img, terrain, frames, phase, frame: 0, variant })
           if (sway) {
             this.tileTweens.push(
               this.tweens.add({
                 targets: img,
-                angle: { from: -1.2, to: 1.2 },
-                duration: 2400 + (phase % 800),
+                angle: { from: -1.6, to: 1.6 },
+                scaleY: img.scaleY * 1.025,
+                duration: 2200 + (phase % 900),
                 delay: phase % 1000,
                 yoyo: true,
                 repeat: -1,
@@ -805,36 +878,42 @@ export class MapScene extends Phaser.Scene {
               })
             )
           }
-          if (terrain === "water") {
-            // Блик на воде: белый квадрат с едва заметной пульсацией прозрачности.
-            const sh = this.add
-              .image(o.x, o.y, TEX.square)
-              .setOrigin(0, 0)
-              .setDisplaySize(l.tile, l.tile)
-              .setAlpha(0.06)
-            this.tileLayer.add(sh)
-            this.tileTweens.push(
-              this.tweens.add({
-                targets: sh,
-                alpha: 0.14,
-                duration: 1800,
-                delay: phase % 1200,
-                yoyo: true,
-                repeat: -1,
-                ease: "Sine.easeInOut"
-              })
-            )
+          // Обломки на месте разрушенной хлипкой стены
+          if (st.map.tiles[y]?.[x] === "wall_breakable" && terrain !== "wall_breakable" && hasTexture(this, rubbleKey))
+            this.tileLayer.add(this.add.image(o.x, o.y, rubbleKey).setOrigin(0, 0).setDisplaySize(l.tile, l.tile))
+          // Берег: пена со сторон суши у сплошной воды
+          if (terrain === "water" && waterFillsTile(biome.id) && hasTexture(this, shoreKey)) {
+            const sides: [Pos, number][] = [
+              [{ x, y: y - 1 }, 0],
+              [{ x: x + 1, y }, 90],
+              [{ x, y: y + 1 }, 180],
+              [{ x: x - 1, y }, -90]
+            ]
+            for (const [n, angle] of sides) {
+              if (waterAt(n)) continue
+              const sh = this.add.image(c.x, c.y, shoreKey).setDisplaySize(l.tile, l.tile).setAngle(angle)
+              this.tileLayer.add(sh)
+              this.shoreImgs.push({ img: sh, phase: phase + angle })
+            }
+          }
+          // Тень от высокого соседа сверху/слева (свет падает сверху-слева)
+          if (!isTallTerrain(terrain) && hasTexture(this, shadeKey)) {
+            if (tallAt({ x, y: y - 1 }))
+              this.tileLayer.add(this.add.image(c.x, c.y, shadeKey).setDisplaySize(l.tile, l.tile).setAlpha(0.9))
+            if (tallAt({ x: x - 1, y }))
+              this.tileLayer.add(
+                this.add.image(c.x, c.y, shadeKey).setDisplaySize(l.tile, l.tile).setAngle(-90).setAlpha(0.75)
+              )
           }
         }
         else {
           g.fillStyle(biome.colors[terrain], 1)
           g.fillRect(o.x, o.y, l.tile, l.tile)
         }
-        g.lineStyle(1, 0x000000, 0.18)
+        g.lineStyle(1, 0x000000, 0.1)
         g.strokeRect(o.x + 0.5, o.y + 0.5, l.tile - 1, l.tile - 1)
         const glyph = hasArt ? undefined : TERRAIN_GLYPH[terrain]
         if (glyph) {
-          const c = tileCenter(l, pos)
           const txt = this.add
             .text(c.x, c.y, glyph, textStyle(l.tile * 0.42, "#ffffff", true, 0))
             .setOrigin(0.5)
@@ -843,7 +922,6 @@ export class MapScene extends Phaser.Scene {
           this.glyphs.push(txt)
         }
         if (st.map.tiles[y]?.[x] === "wall_breakable") {
-          const c = tileCenter(l, pos)
           const hp = st.walls[posKey(pos)] ?? 0
           const t = this.add
             .text(
@@ -860,11 +938,31 @@ export class MapScene extends Phaser.Scene {
         }
       }
     }
-    // Разделитель зон спавна
-    g.lineStyle(2, 0xffffff, 0.08)
-    g.strokeRect(l.ox, l.oy, l.tile * MAP_W, l.tile * MAP_H)
+    // Рамка поля: тёмный контур и светлый внутренний кант
+    g.lineStyle(Math.max(3, l.tile * 0.06), 0x000000, 0.35)
+    g.strokeRect(l.ox - 1, l.oy - 1, l.tile * MAP_W + 2, l.tile * MAP_H + 2)
+    g.lineStyle(2, 0xffffff, 0.18)
+    g.strokeRect(l.ox + 1, l.oy + 1, l.tile * MAP_W - 2, l.tile * MAP_H - 2)
+    this.groundBg?.destroy()
+    this.groundBg = null
+    const groundTex = groundKey(st.map.biomeId)
+    if (hasTexture(this, groundTex)) {
+      const w = this.scale.width
+      const h = this.scale.height
+      this.groundBg = this.add
+        .tileSprite(0, 0, w, h, groundTex)
+        .setOrigin(0, 0)
+        .setTileScale(l.tile / 128, l.tile / 128)
+        .setTilePosition(-l.ox * (128 / l.tile), -l.oy * (128 / l.tile))
+        // Светлые биомы (снег, лёд, песок) затемняем мягче, иначе земля вокруг поля становится серой
+        .setTint(["winter_park", "glacier", "desert"].includes(st.map.biomeId) ? 0xc9d2dc : 0x9a9a9a)
+        .setAlpha(0.9)
+        .setDepth(-2)
+    }
     this.startTileAnimations()
     this.ensureWeather(st, flyAnchors)
+    this.ambient?.destroy()
+    this.ambient = new AmbientLayer(this, { biomeId: biome.id, layout: l, seed, water: waterSpots, plain: plainSpots })
   }
 
   /* ---------- Живые тайлы ---------- */
@@ -877,13 +975,13 @@ export class MapScene extends Phaser.Scene {
     this.animTiles = []
   }
 
-  /** Один таймер на все кадровые анимации: вода 450 мс (0→1→2→1), листва 900 мс (0→1). */
+  /** Один таймер на все кадровые анимации: вода 4 кадра по 220 мс, листва 900 мс (0→1), пена 2 кадра. */
   private startTileAnimations(): void {
-    if (this.animTiles.length === 0) return
-    const WATER_SEQ = [0, 1, 2, 1]
+    if (this.animTiles.length === 0 && this.shoreImgs.length === 0) return
+    const WATER_SEQ = [0, 1, 2, 3]
     const FOREST_SEQ = [0, 1]
     this.tileTimer = this.time.addEvent({
-      delay: 150,
+      delay: 110,
       loop: true,
       callback: () => {
         if (!sceneAlive(this)) return
@@ -892,17 +990,28 @@ export class MapScene extends Phaser.Scene {
           if (!cell.img.scene) continue
           const water = cell.terrain === "water"
           const seq = water ? WATER_SEQ : FOREST_SEQ
-          const period = water ? 450 : 900
+          const period = water ? 220 : 900
           const idx = Math.floor((now + cell.phase) / period) % seq.length
           const frame = Math.min(cell.frames - 1, seq[idx] ?? 0)
           if (frame === cell.frame) continue
-          const key = tileTexKey(this.tileBiome, cell.terrain, frame)
+          const key = envTileKey(this.tileBiome, cell.terrain, frame, cell.variant)
           if (!hasTexture(this, key)) continue
           cell.frame = frame
           const dw = cell.img.displayWidth
           const dh = cell.img.displayHeight
           cell.img.setTexture(key)
           cell.img.setDisplaySize(dw, dh)
+        }
+        // Пена у берега: два кадра, сдвинутые по фазе
+        for (const s of this.shoreImgs) {
+          if (!s.img.scene) continue
+          const f = Math.floor((now + s.phase) / 520) % SHORE_FRAMES
+          const key = edgeKey(this.tileBiome, "shore", f)
+          if (s.img.texture.key === key || !hasTexture(this, key)) continue
+          const dw = s.img.displayWidth
+          const dh = s.img.displayHeight
+          s.img.setTexture(key)
+          s.img.setDisplaySize(dw, dh)
         }
       }
     })
@@ -947,11 +1056,13 @@ export class MapScene extends Phaser.Scene {
   private syncDecals(st: BattleState): void {
     const pools = st.decals.filter(d => d.kind === "pool")
     if (pools.length === this.decalCount) return
+    // Поле перерисовано (раскладка или новый бой): лужи из состояния — сразу в итоговом виде, капли-пятна сбрасываются
     this.decalLayer.removeAll(true)
+    clearGoreStains(this)
     pools.forEach((d, i) => {
       const c = this.center(d.pos)
       this.decalLayer.add(
-        bloodDecal(this, c.x, c.y + this.tile * 0.15, this.tile, "pool", i + d.pos.x * 3 + d.pos.y * 7)
+        bloodDecal(this, c.x, c.y + this.tile * 0.15, this.tile, "pool", i + d.pos.x * 3 + d.pos.y * 7, false)
       )
     })
     this.decalCount = pools.length
@@ -1041,6 +1152,66 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
+  /** Следы лап по клеткам пути (кроме стартовой), повёрнуты по ходу движения; «шагают» в tickEnv. */
+  private layPaws(path: Pos[] | null): void {
+    const t = this.tile
+    let n = 0
+    if (path) {
+      for (let i = 1; i < path.length - 1; i++) {
+        const prev = path[i - 1]
+        const cur = path[i]
+        if (!prev || !cur) continue
+        const c = this.center(cur)
+        const ang = Math.atan2(cur.y - prev.y, cur.x - prev.x) * (180 / Math.PI) + 90
+        for (const side of [-1, 1]) {
+          let img = this.pawPool[n]
+          if (!img) {
+            img = this.add.image(0, 0, ENV.paw).setDepth(3.2)
+            this.pawPool[n] = img
+          }
+          const rad = ((ang - 90) * Math.PI) / 180
+          const off = t * 0.12 * side
+          img
+            .setPosition(c.x - Math.sin(rad) * off, c.y + Math.cos(rad) * off)
+            .setAngle(ang)
+            .setDisplaySize(t * 0.26, t * 0.26)
+            .setTint(HL.path)
+            .setVisible(true)
+            .setData("step", i * 2 + (side > 0 ? 1 : 0))
+          n++
+        }
+      }
+    }
+    for (let i = n; i < this.pawPool.length; i++) this.pawPool[i]?.setVisible(false)
+    this.pawCount = n
+  }
+
+  /** Каждый кадр: волна пульса по светящимся клеткам, бег штриховки опасности, «шагающие» следы лап. */
+  private tickEnv(time: number): void {
+    if (!this.hlLayer) return
+    const pulse = (img: Phaser.GameObjects.Image, speed: number, depth: number): void => {
+      if (!img.visible || this.tweens.isTweening(img)) return
+      const base = (img.getData("baseA") as number | undefined) ?? img.alpha
+      const wave = (img.getData("wave") as number | undefined) ?? 0
+      img.setAlpha(base * (1 - depth + depth * (0.5 + 0.5 * Math.sin(time * speed - wave * 0.7))))
+    }
+    for (const img of this.reachPool) pulse(img, 0.004, 0.35)
+    for (const img of this.targetPool) pulse(img, 0.009, 0.45)
+    for (const img of this.threatPool) pulse(img, 0.005, 0.4)
+    for (const ts of this.dangerPool) if (ts.visible) ts.tilePositionX = (time * 0.02) % 64
+    if (this.pawCount > 0) {
+      const steps = this.pawCount + 4
+      const head = Math.floor(time / 110) % steps
+      for (let i = 0; i < this.pawCount; i++) {
+        const img = this.pawPool[i]
+        if (!img) continue
+        const step = (img.getData("step") as number | undefined) ?? i
+        const d = head - step
+        img.setAlpha(d >= 0 && d < 4 ? 0.95 - d * 0.18 : 0.28)
+      }
+    }
+  }
+
   /* ---------- Подсветки ---------- */
 
   private tileAt(key: string): Pos | null {
@@ -1050,14 +1221,15 @@ export class MapScene extends Phaser.Scene {
     return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null
   }
 
-  /** Квадрат из пула: создаётся по требованию, переиспользуется между перерисовками. */
-  private poolTile(pool: Phaser.GameObjects.Image[], i: number): Phaser.GameObjects.Image {
+  /** Светящаяся клетка из пула: создаётся по требованию, переиспользуется между перерисовками. */
+  private poolTile(pool: Phaser.GameObjects.Image[], i: number, texture: string = ENV.glowTile): Phaser.GameObjects.Image {
     let img = pool[i]
     if (!img) {
-      img = this.add.image(0, 0, TEX.square).setOrigin(0, 0)
+      img = this.add.image(0, 0, texture).setOrigin(0, 0)
       this.hlLayer.add(img)
       pool[i] = img
     }
+    else if (img.texture.key !== texture) img.setTexture(texture)
     return img
   }
 
@@ -1074,12 +1246,13 @@ export class MapScene extends Phaser.Scene {
   private layTiles(
     pool: Phaser.GameObjects.Image[],
     tiles: { key: string, color: number, alpha: number, delay: number }[],
-    animate: boolean
+    animate: boolean,
+    texture: string = ENV.glowTile
   ): void {
     const t = this.layout.tile
     tiles.forEach((spec, i) => {
       const pos = this.tileAt(spec.key)
-      const img = this.poolTile(pool, i)
+      const img = this.poolTile(pool, i, texture)
       if (!pos) {
         img.setVisible(false)
         return
@@ -1091,6 +1264,8 @@ export class MapScene extends Phaser.Scene {
         .setDisplaySize(t - 2, t - 2)
         .setTint(spec.color)
         .setVisible(true)
+        .setData("baseA", spec.alpha)
+        .setData("wave", pos.x + pos.y)
       if (animate) {
         img.setAlpha(0)
         this.tweens.add({ targets: img, alpha: spec.alpha, duration: 160, delay: spec.delay, ease: "Quad.easeOut" })
@@ -1100,18 +1275,53 @@ export class MapScene extends Phaser.Scene {
     this.hidePool(pool, tiles.length)
   }
 
+  /** Зона опасности: бегущая оранжевая штриховка и контур по границе зоны; угроза врага — фиолетовые светящиеся клетки. */
   private drawDanger(ui: BattleUiState): void {
     const g = this.dangerG
     g.clear()
-    if (ui.dangerOn) {
-      for (const k of ui.dangerTiles) {
-        this.fillTile(g, k, HL.danger, 0.3)
-        this.hatchTile(g, k, HL.danger)
+    const t = this.layout.tile
+    const keys = ui.dangerOn ? [...ui.dangerTiles] : []
+    const set = new Set(keys)
+    keys.forEach((k, i) => {
+      const pos = this.tileAt(k)
+      if (!pos) return
+      let ts = this.dangerPool[i]
+      if (!ts) {
+        ts = this.add.tileSprite(0, 0, 64, 64, ENV.hatch).setOrigin(0, 0).setTint(HL.danger)
+        this.dangerLayer.add(ts)
+        this.dangerPool[i] = ts
       }
-    }
+      const o = tileOrigin(this.layout, pos)
+      ts.setPosition(o.x, o.y).setSize(t, t).setTileScale(t / 64, t / 64).setAlpha(0.45).setVisible(true)
+      // Контур только там, где сосед не в зоне
+      g.lineStyle(Math.max(2, t * 0.05), HL.danger, 0.95)
+      if (!set.has(posKey({ x: pos.x, y: pos.y - 1 }))) g.lineBetween(o.x, o.y, o.x + t, o.y)
+      if (!set.has(posKey({ x: pos.x, y: pos.y + 1 }))) g.lineBetween(o.x, o.y + t, o.x + t, o.y + t)
+      if (!set.has(posKey({ x: pos.x - 1, y: pos.y }))) g.lineBetween(o.x, o.y, o.x, o.y + t)
+      if (!set.has(posKey({ x: pos.x + 1, y: pos.y }))) g.lineBetween(o.x + t, o.y, o.x + t, o.y + t)
+    })
+    for (let i = keys.length; i < this.dangerPool.length; i++) this.dangerPool[i]?.setVisible(false)
     const tg = this.threatG
     tg.clear()
-    if (ui.infoThreat) for (const k of ui.infoThreat) this.fillTile(tg, k, HL.threat, 0.38)
+    const threat = ui.infoThreat ? [...ui.infoThreat] : []
+    threat.forEach((k, i) => {
+      const pos = this.tileAt(k)
+      const img = this.poolTile(this.threatPool, i)
+      if (!pos) {
+        img.setVisible(false)
+        return
+      }
+      const o = tileOrigin(this.layout, pos)
+      img
+        .setPosition(o.x + 1, o.y + 1)
+        .setDisplaySize(t - 2, t - 2)
+        .setTint(HL.threat)
+        .setAlpha(0.55)
+        .setVisible(true)
+        .setData("baseA", 0.55)
+        .setData("wave", pos.x + pos.y)
+    })
+    this.hidePool(this.threatPool, threat.length)
   }
 
   private drawReach(ui: BattleUiState): void {
@@ -1129,7 +1339,7 @@ export class MapScene extends Phaser.Scene {
     for (const node of ui.reach.values()) {
       if (!node.canStop) continue
       maxCost = Math.max(maxCost, node.cost)
-      reachTiles.push({ key: posKey(node.pos), color: HL.reach, alpha: 0.35, delay: node.cost * 45 })
+      reachTiles.push({ key: posKey(node.pos), color: HL.reach, alpha: 0.5, delay: node.cost * 45 })
     }
     const reachSig = `${ui.selectedId}:${reachTiles.map(r => r.key).join("|")}`
     if (reachSig !== this.reachSig) {
@@ -1140,14 +1350,14 @@ export class MapScene extends Phaser.Scene {
     const targetTiles: { key: string, color: number, alpha: number, delay: number }[] = []
     const after = maxCost * 45 + 60
     if (ui.attackTiles)
-      for (const k of ui.attackTiles) targetTiles.push({ key: k, color: HL.attack, alpha: 0.4, delay: after })
+      for (const k of ui.attackTiles) targetTiles.push({ key: k, color: HL.attack, alpha: 0.62, delay: after })
     if (ui.assistTiles)
-      for (const k of ui.assistTiles) targetTiles.push({ key: k, color: HL.assist, alpha: 0.4, delay: after + 40 })
+      for (const k of ui.assistTiles) targetTiles.push({ key: k, color: HL.assist, alpha: 0.6, delay: after + 40 })
     const targetSig = `${ui.selectedId}:${ui.mode}:${targetTiles.map(r => r.key + r.color).join("|")}`
     if (targetSig !== this.targetSig) {
       const fresh = !this.targetSig.startsWith(`${ui.selectedId}:`)
       this.targetSig = targetSig
-      this.layTiles(this.targetPool, targetTiles, fresh)
+      this.layTiles(this.targetPool, targetTiles, fresh, ENV.targetTile)
     }
   }
 
@@ -1208,11 +1418,14 @@ export class MapScene extends Phaser.Scene {
     this.drawDanger(ui)
     this.drawReach(ui)
     if (ui.path && ui.path.length > 1) this.drawPathArrow(pg, ui.path)
+    this.layPaws(ui.path && ui.path.length > 1 ? ui.path : null)
 
     // Выбрали юнита тапом — подскок
     if (ui.selectedId !== this.lastSelectedId) {
+      // Выделение: кольцо, свечение и подскок (setSelected сам делает hop)
+      if (this.lastSelectedId) this.units.get(this.lastSelectedId)?.setSelected(false)
       this.lastSelectedId = ui.selectedId
-      if (ui.selectedId && !ui.dragging && ui.mode === "unitSelected") this.units.get(ui.selectedId)?.hop()
+      if (ui.selectedId && !ui.dragging && ui.mode === "unitSelected") this.units.get(ui.selectedId)?.setSelected(true)
     }
 
     // Сам юнит стоит на клетке предпросмотра (или в руке), а на исходной клетке — бледный призрак

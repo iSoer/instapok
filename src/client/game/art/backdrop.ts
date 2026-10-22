@@ -290,16 +290,128 @@ function prop(ctx: Ctx): string {
   }
 }
 
-/** Половина фона кинематика за бойцом, стоящим на клетке `terrain` биома `biomeId`. */
-export function backdropSvg(biomeId: string, terrain: TerrainId, side: Side): string {
+/* ---------- Слои для параллакса ---------- */
+
+function mix(a: string, b: string, t: number): string {
+  const pa = parseInt(a.replace("#", ""), 16)
+  const pb = parseInt(b.replace("#", ""), 16)
+  const ch = (sh: number): number => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t)
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, "0")}`
+}
+
+const SKY_BOTTOM: Record<string, string> = {
+  yard: "#eef9ff",
+  roofs: "#ff9a6b",
+  basement: "#3d3640",
+  dump: "#eae4c6",
+  winter_park: "#f3f8fc",
+  jungle: "#bfe8a0",
+  desert: "#fff2cc",
+  glacier: "#bfe3ff",
+  canyon: "#ff9a5c"
+}
+
+/** Дальний план: силуэты горизонта в два ряда, растворяющиеся в небе. */
+function distant(ctx: Ctx): string {
+  const b = ctx.biome.id
+  const haze = SKY_BOTTOM[b] ?? "#eef9ff"
+  const far = (c: string): string => mix(c, haze, 0.62)
+  const mid = (c: string): string => mix(c, haze, 0.35)
+  const y = HORIZON
+  switch (b) {
+    case "yard":
+      return `<g fill="${far("#5f8f6a")}">${[10, 52, 98, 150].map((x, i) => `<rect x="${x}" y="${y - 44 - (i % 2) * 10}" width="${30 + (i % 3) * 6}" height="${50 + (i % 2) * 10}" /><path d="M${x - 4} ${y - 44 - (i % 2) * 10} l${19 + (i % 3) * 3} -16 l${19 + (i % 3) * 3} 16 z" />`).join("")}</g><g fill="${mid("#3f7a3a")}">${[0, 40, 84, 130, 176].map((x, i) => `<circle cx="${x}" cy="${y - 12}" r="${16 + (i % 3) * 5}" />`).join("")}</g>`
+    case "roofs":
+      return `<g fill="${far("#3a2a4a")}">${Array.from({ length: 9 }, (_, i) => `<rect x="${i * 24 - 6}" y="${y - 60 - ((i * 37) % 40)}" width="22" height="${66 + ((i * 37) % 40)}" />`).join("")}</g><g fill="#ffe08a" opacity=".55">${Array.from({ length: 18 }, (_, i) => `<rect x="${(i * 23) % 200}" y="${y - 50 - ((i * 13) % 50)}" width="3" height="4" />`).join("")}</g><g fill="${mid("#4a3550")}">${Array.from({ length: 7 }, (_, i) => `<rect x="${i * 32 - 10}" y="${y - 30 - ((i * 19) % 20)}" width="28" height="${36 + ((i * 19) % 20)}" />`).join("")}</g>`
+    case "basement":
+      return "<g stroke=\"#5a5060\" stroke-width=\"7\" fill=\"none\" opacity=\".8\"><path d=\"M-10 26 h220\" /><path d=\"M-10 42 h80 q10 0 10 10 v40\" /></g><g stroke=\"#3a3440\" stroke-width=\"2\" opacity=\".8\"><path d=\"M-10 22 h220 M-10 30 h220\" /></g><path d=\"M140 0 v54\" stroke=\"#222\" stroke-width=\"1.5\" /><circle cx=\"140\" cy=\"60\" r=\"7\" fill=\"#ffe7a0\" /><circle cx=\"140\" cy=\"60\" r=\"30\" fill=\"#ffe7a0\" opacity=\".18\" />"
+    case "dump":
+      return `<g fill="${far("#6b6550")}"><path d="M-10 ${y} q30 -50 60 -30 q20 -30 50 -6 q30 -40 70 -10 q20 -12 40 6 v40 h-220 z" /></g><g fill="${mid("#4e4a3a")}"><path d="M-10 ${y} q20 -20 40 -10 q24 -24 50 0 q30 -20 60 -2 q30 -16 60 6 v20 h-210 z" /></g>`
+    case "winter_park":
+      return `<g fill="${far("#9fb8cc")}"><path d="M-10 ${y - 10} q50 -40 100 -10 q50 -36 120 0 v20 h-220 z" /></g><g fill="${mid("#2f5a3a")}">${[8, 36, 70, 120, 150, 182].map((x, i) => `<path d="M${x} ${y - 40 - (i % 2) * 8} l-12 34 h24 z" />`).join("")}</g><g fill="#fff" opacity=".8">${[8, 36, 70, 120, 150, 182].map((x, i) => `<path d="M${x} ${y - 40 - (i % 2) * 8} l-4 10 h8 z" />`).join("")}</g>`
+    case "jungle":
+      return `<g fill="${far("#2f6a3a")}">${Array.from({ length: 8 }, (_, i) => `<ellipse cx="${i * 28}" cy="${y - 40}" rx="26" ry="${30 + (i % 3) * 8}" />`).join("")}</g><g fill="${mid("#1f5a2a")}">${Array.from({ length: 7 }, (_, i) => `<ellipse cx="${i * 32 + 12}" cy="${y - 12}" rx="22" ry="20" />`).join("")}</g><g stroke="${mid("#2f5a2a")}" stroke-width="2" fill="none">${[20, 70, 130, 175].map(x => `<path d="M${x} 0 q6 30 -2 60 q-6 20 4 40" />`).join("")}</g>`
+    case "desert":
+      return `<g fill="${far("#c98a4a")}"><path d="M110 ${y} v-46 h60 v46 z" /><path d="M100 ${y - 40} h80 v-6 h-80 z" /></g><g fill="${mid("#e0b060")}"><path d="M-10 ${y} q50 -30 100 -6 q60 -24 120 4 v10 h-220 z" /></g>`
+    case "glacier":
+      return `<g fill="none" stroke="#7cf0c0" stroke-width="10" opacity=".22"><path d="M-10 40 q60 -20 110 10 t110 -6" /><path d="M-10 58 q60 -16 110 8 t110 -4" stroke="#b07cf0" /></g><g fill="${far("#5d8fc5")}"><path d="M-10 ${y} l30 -60 l24 30 l30 -70 l30 50 l26 -40 l40 90 z" /></g><g fill="${mid("#8fc4e8")}"><path d="M-10 ${y} l40 -34 l30 20 l40 -40 l40 30 l30 -18 l40 42 z" /></g><g fill="#fff" opacity=".7"><path d="M44 ${y - 60} l-6 14 h12 z M104 ${y - 70} l-6 14 h12 z" /></g>`
+    case "canyon":
+      return `<g fill="${far("#7a3a2a")}"><path d="M-10 ${y} v-50 h40 v-10 h30 v60 z M120 ${y} v-70 h50 v20 h40 v50 z" /></g><g fill="${mid("#a8503a")}"><path d="M40 ${y} v-30 h60 v30 z M170 ${y} v-24 h40 v24 z" /></g>`
+    default:
+      return ""
+  }
+}
+
+/** Лучи от солнца/лампы на дальнем плане. */
+function farRays(ctx: Ctx): string {
+  const b = ctx.biome.id
+  if (b === "basement") return ""
+  const x = ctx.side === "left" ? 40 : 160
+  const color = b === "roofs" || b === "canyon" ? "#ffd0a0" : b === "glacier" || b === "winter_park" ? "#e8f6ff" : "#fff6c8"
+  return `<g fill="${color}" opacity=".18">${[-38, -14, 10, 34].map(a => `<path d="M${x} 30 L${x + Math.tan((a * Math.PI) / 180) * 140 - 10} ${HORIZON} L${x + Math.tan((a * Math.PI) / 180) * 140 + 10} ${HORIZON} Z" />`).join("")}</g>`
+}
+
+/** Передний план: травинки, камешки, снег у нижнего края — под ногами бойца и ближе к зрителю. */
+function foreground(ctx: Ctx): string {
+  const b = ctx.biome.id
+  const c = hex(ctx.biome.colors.plain)
+  const dark = shade(c, -0.3)
+  const bottom = H - 4
+  switch (b) {
+    case "yard":
+    case "jungle":
+      return `<g stroke="${dark}" stroke-width="3" stroke-linecap="round" fill="none">${Array.from({ length: 18 }, (_, i) => `<path d="M${i * 12} ${bottom} q${(i % 3) - 1} -14 ${((i % 5) - 2) * 3} -${18 + (i % 4) * 6}" />`).join("")}</g>`
+    case "winter_park":
+    case "glacier":
+      return `<path d="M-10 ${bottom - 16} q40 -12 80 0 t80 0 t80 0 V ${H} H -10 Z" fill="#ffffff" opacity=".85" />`
+    case "desert":
+    case "canyon":
+      return `<g fill="${dark}">${[16, 60, 132, 180].map((x, i) => `<ellipse cx="${x}" cy="${bottom - 4}" rx="${10 + (i % 2) * 6}" ry="6" />`).join("")}</g>`
+    case "dump":
+      return `<g fill="${dark}"><rect x="10" y="${bottom - 12}" width="22" height="8" rx="2" transform="rotate(-10 20 ${bottom - 8})" /><circle cx="160" cy="${bottom - 6}" r="8" /></g>`
+    default:
+      return ""
+  }
+}
+
+export interface BackdropLayers {
+  /** Небо, светило, силуэты горизонта, лучи — двигать медленнее всего. */
+  far: string
+  /** Земля с фактурой и затенением к краю кадра. */
+  mid: string
+  /** Реквизит клетки с тенью и передний план — двигать быстрее всего. */
+  near: string
+}
+
+/**
+ * Фон кинематика тремя слоями одного размера (viewBox 0 0 200 300, прозрачные там, где слоя нет) —
+ * для параллакса: far ← mid ← near. Склеенные по порядку дают `backdropSvg`.
+ */
+export function backdropLayersSvg(biomeId: string, terrain: TerrainId, side: Side): BackdropLayers {
   const biome = biomeDef(biomeId)
   const ctx: Ctx = { biome, terrain, side, x: side === "left" ? 108 : 92, id: `bd-${biomeId}-${terrain}-${side}` }
+  const head = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`
+  const haze = SKY_BOTTOM[biomeId] ?? "#eef9ff"
+  const far = `${head}${defs(ctx)}${sky(ctx)}${farRays(ctx)}${distant(ctx)}
+<defs><linearGradient id="${ctx.id}-haze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${haze}" stop-opacity="0" /><stop offset="1" stop-color="${haze}" stop-opacity=".55" /></linearGradient></defs>
+<rect x="0" y="${HORIZON - 40}" width="${W}" height="40" fill="url(#${ctx.id}-haze)" /></svg>`
+  const mid = `${head}<defs><linearGradient id="${ctx.id}-gsh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".35" /></linearGradient>
+<radialGradient id="${ctx.id}-spot" cx="${ctx.side === "left" ? "54%" : "46%"}" cy="62%" r="45%"><stop offset="0" stop-color="#fff" stop-opacity=".16" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></radialGradient></defs>
+${ground(ctx)}<rect x="0" y="${HORIZON}" width="${W}" height="${H - HORIZON}" fill="url(#${ctx.id}-gsh)" /><rect x="0" y="${HORIZON}" width="${W}" height="${H - HORIZON}" fill="url(#${ctx.id}-spot)" /></svg>`
+  const near = `${head}<defs><filter id="${ctx.id}-ds" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="3" dy="5" stdDeviation="3" flood-color="#000" flood-opacity=".35" /></filter>
+<linearGradient id="${ctx.id}-vig" x1="0" y1="0" x2="0" y2="1"><stop offset=".7" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".35" /></linearGradient></defs>
+<ellipse cx="${ctx.x}" cy="${FEET + 4}" rx="70" ry="10" fill="#000" opacity=".18" /><g filter="url(#${ctx.id}-ds)">${prop(ctx)}</g>${foreground(ctx)}<rect x="0" y="0" width="${W}" height="${H}" fill="url(#${ctx.id}-vig)" /></svg>`
+  return { far, mid, near }
+}
+
+/** Половина фона кинематика за бойцом, стоящим на клетке `terrain` биома `biomeId` (все слои вместе). */
+export function backdropSvg(biomeId: string, terrain: TerrainId, side: Side): string {
+  const layers = backdropLayersSvg(biomeId, terrain, side)
+  const inner = (svg: string): string => svg.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "")
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  ${defs(ctx)}
-  ${sky(ctx)}
-  ${ground(ctx)}
-  ${prop(ctx)}
-  <rect x="0" y="0" width="${W}" height="${H}" fill="none" />
+  ${inner(layers.far)}
+  ${inner(layers.mid)}
+  ${inner(layers.near)}
 </svg>`
 }
 

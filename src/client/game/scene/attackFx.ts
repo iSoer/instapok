@@ -4,6 +4,11 @@ import { artWeapon, type ArtWeapon } from "@game/art/index"
 import { weaponDef } from "@game/content/weapons"
 import { TEX } from "./textures"
 import { floatText, sceneAlive, wait } from "./fx"
+import { arrowShot, magicBolt, slashTrail, shockRing, thrustLine } from "./motionFx"
+
+/** Цвет тёмной (Black Magic) и светлой (White Magic) магии. */
+const DARK_MAGIC = 0xb15cff
+const LIGHT_MAGIC = 0xffe8a3
 
 /**
  * Персональные анимации атак по типу оружия: замах/бросок атакующего, фирменный эффект на защищающемся,
@@ -122,10 +127,6 @@ export function impactFeel(scene: Phaser.Scene, f: ImpactFeel): void {
 }
 
 /* ---------- Вспомогательные ---------- */
-
-function dist(a: { x: number, y: number }, b: { x: number, y: number }): number {
-  return Math.hypot(b.x - a.x, b.y - a.y)
-}
 
 function tweenP(scene: Phaser.Scene, cfg: Phaser.Types.Tweens.TweenBuilderConfig): Promise<void> {
   return new Promise((resolve) => {
@@ -382,47 +383,6 @@ function swingArc(scene: Phaser.Scene, x: number, y: number, radius: number, dir
   })
 }
 
-/** Конус шипения: три расширяющихся красных клина + пламя. Возвращает промис прибытия. */
-function hissCone(
-  scene: Phaser.Scene,
-  from: { x: number, y: number },
-  to: { x: number, y: number },
-  size: number,
-  dir: number,
-  speed: number,
-  scale = 1
-): Promise<void> {
-  if (!sceneAlive(scene)) return Promise.resolve()
-  const travel = 220 / speed
-  const d = dist(from, to)
-  for (let i = 0; i < 3; i++) {
-    const g = scene.add.graphics().setDepth(24).setPosition(from.x, from.y)
-    const len = d * (0.35 + i * 0.3)
-    const half = size * (0.08 + i * 0.07) * scale
-    g.fillStyle(i === 0 ? 0xff4d4d : i === 1 ? 0xe63946 : 0xb3001b, 0.55 - i * 0.12)
-    g.fillTriangle(0, 0, dir * len, -half, dir * len, half)
-    g.setScale(0.1, 1)
-    scene.tweens.add({ targets: g, scaleX: 1, duration: travel * (0.6 + i * 0.2), ease: "Cubic.easeOut" })
-    scene.tweens.add({ targets: g, alpha: 0, duration: 180 / speed, delay: travel, onComplete: () => safeDestroy(g) })
-  }
-  burst(
-    scene,
-    from.x + dir * size * 0.1,
-    from.y,
-    {
-      moveToX: to.x,
-      moveToY: to.y - size * 0.1,
-      scale: { start: 0.9 * scale, end: 0.2 },
-      alpha: { start: 1, end: 0.4 },
-      lifespan: travel,
-      tint: [0xff6b35, 0xff9f1c, 0xe63946, 0xffd166]
-    },
-    12,
-    travel + 300
-  )
-  return wait(scene, travel)
-}
-
 /** Угли поднимаются с цели после шипения. */
 function embers(scene: Phaser.Scene, x: number, y: number, size: number): void {
   burst(
@@ -540,54 +500,6 @@ function windSwirl(scene: Phaser.Scene, x: number, y: number, size: number, spee
   )
 }
 
-/** Жёлудь по параболе со следом. Возвращает промис попадания. */
-function acornShot(
-  scene: Phaser.Scene,
-  from: { x: number, y: number },
-  to: { x: number, y: number },
-  size: number,
-  speed: number,
-  scale = 1
-): Promise<void> {
-  if (!sceneAlive(scene)) return Promise.resolve()
-  const travel = 260 / speed
-  const r = size * 0.07 * scale
-  const acorn = scene.add.container(from.x, from.y).setDepth(25)
-  const g = scene.add.graphics()
-  g.fillStyle(0xa8763f, 1)
-  g.lineStyle(1.5, 0x5a3a24, 1)
-  g.fillEllipse(0, r * 0.3, r * 1.6, r * 2)
-  g.strokeEllipse(0, r * 0.3, r * 1.6, r * 2)
-  g.fillStyle(0x6b4a2c, 1)
-  g.fillEllipse(0, -r * 0.6, r * 1.9, r * 1.1)
-  g.fillRect(-r * 0.15, -r * 1.5, r * 0.3, r * 0.7)
-  acorn.add(g)
-  const peak = Math.min(size * 0.6, dist(from, to) * 0.35)
-  const prog = { t: 0 }
-  let trailTick = 0
-  scene.tweens.add({ targets: acorn, angle: 720, duration: travel, ease: "Linear" })
-  const done = tweenP(scene, {
-    targets: prog,
-    t: 1,
-    duration: travel,
-    ease: "Linear",
-    onUpdate: () => {
-      const t = prog.t
-      acorn.setPosition(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * peak)
-      if (++trailTick % 3 === 0) {
-        const d = scene.add
-          .image(acorn.x, acorn.y, TEX.dot)
-          .setTint(0xd9b382)
-          .setAlpha(0.6)
-          .setDepth(24)
-          .setScale(r * 0.09)
-        scene.tweens.add({ targets: d, alpha: 0, scale: 0, duration: 200 / speed, onComplete: () => safeDestroy(d) })
-      }
-    }
-  })
-  return done.then(() => safeDestroy(acorn))
-}
-
 /** Веер репейников летит в цель и прилипает. Возвращает промис попадания первого. */
 function burrFan(
   scene: Phaser.Scene,
@@ -635,64 +547,6 @@ function burrFan(
     })
   }
   return wait(scene, travel + 10)
-}
-
-/** Бинт разматывается волнистой линией от атакующего к цели. Возвращает промис попадания. */
-function bandageThrow(
-  scene: Phaser.Scene,
-  from: { x: number, y: number },
-  to: { x: number, y: number },
-  size: number,
-  speed: number,
-  scale = 1
-): Promise<void> {
-  if (!sceneAlive(scene)) return Promise.resolve()
-  const travel = 260 / speed
-  const line = scene.add.graphics().setDepth(24)
-  const roll = scene.add.graphics().setDepth(25).setPosition(from.x, from.y)
-  const rr = size * 0.06 * scale
-  roll.fillStyle(0xffffff, 1)
-  roll.lineStyle(1.2, 0xc9c9d1, 1)
-  roll.fillRoundedRect(-rr, -rr * 0.8, rr * 2, rr * 1.6, rr * 0.4)
-  roll.strokeRoundedRect(-rr, -rr * 0.8, rr * 2, rr * 1.6, rr * 0.4)
-  const prog = { t: 0 }
-  scene.tweens.add({ targets: roll, angle: 540, duration: travel })
-  const done = tweenP(scene, {
-    targets: prog,
-    t: 1,
-    duration: travel,
-    ease: "Sine.easeOut",
-    onUpdate: () => {
-      const t = prog.t
-      const cx = from.x + (to.x - from.x) * t
-      const cy = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * size * 0.15
-      roll.setPosition(cx, cy)
-      line.clear()
-      line.lineStyle(size * 0.03 * scale, 0xffffff, 0.95)
-      line.beginPath()
-      line.moveTo(from.x, from.y)
-      const segs = 14
-      for (let i = 1; i <= segs; i++) {
-        const u = i / segs
-        const px = from.x + (cx - from.x) * u
-        const py = from.y + (cy - from.y) * u + Math.sin(u * Math.PI * 4 + t * 10) * size * 0.04 * (1 - u)
-        line.lineTo(px, py)
-      }
-      line.strokePath()
-    }
-  })
-  return done.then(() => {
-    scene.tweens.add({
-      targets: [line, roll],
-      alpha: 0,
-      duration: 220 / speed,
-      delay: 120 / speed,
-      onComplete: () => {
-        safeDestroy(line)
-        safeDestroy(roll)
-      }
-    })
-  })
 }
 
 /** Розовая ударная волна + ноты/сердечки к цели. Возвращает промис попадания. */
@@ -842,6 +696,7 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
     case "claw": {
       motion = lungeMotion(ctx, 0.6, 120, 180, 40, () => {
         if (!deco) return
+        slashTrail(scene, defPos.x, defPos.y, size * 0.9, dir, 0xff9aa2, speed, ctx.special)
         slashMarks(scene, defPos.x, defPos.y, size, dir, speed)
         squash(scene, defender, 0.85, 180 / speed)
       })
@@ -850,6 +705,14 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
     case "fang": {
       motion = lungeMotion(ctx, 0.7, 130, 200, 90, () => {
         if (!deco) return
+        thrustLine(
+          scene,
+          { x: defPos.x - dir * size * 0.6, y: defPos.y },
+          { x: defPos.x + dir * size * 0.15, y: defPos.y },
+          size,
+          0x8ecae6,
+          speed
+        )
         jawClamp(scene, defPos.x, defPos.y, size, speed)
         later(scene, 90 / speed, () => squash(scene, defender, 0.8, 200 / speed))
       })
@@ -878,6 +741,7 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
           ease: "Cubic.easeIn"
         })
         if (deco) {
+          slashTrail(scene, defPos.x - dir * size * 0.05, defPos.y, size * 0.8, dir, 0x2ec4b6, speed, true)
           swingArc(scene, attacker.x + dir * size * 0.1, atkPos.y, size * 0.55, dir, speed)
           impactStar(scene, defPos.x - dir * size * 0.1, defPos.y - size * 0.05, size, 0xffd166, speed)
           floatText(scene, defPos.x, defPos.y - size * 0.55, "ХРЯСЬ", "#ffd166", speed, {
@@ -903,9 +767,11 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
       motion = castMotion(ctx, 120, async () => {
         const mouth = { x: atkPos.x + dir * size * 0.18, y: atkPos.y - size * 0.05 }
         if (!deco) return wait(scene, 120 / speed)
-        await hissCone(scene, mouth, defPos, size, dir, speed)
-        tintFor(scene, defender, 0xff6b6b, 80 / speed, 300 / speed)
+        // Black Magic: круг рун, тёмный сгусток с хвостом, вспышка и пламя у цели
+        await magicBolt(scene, mouth, defPos, size * 0.8, speed, DARK_MAGIC)
+        tintFor(scene, defender, 0xc77dff, 40 / speed, 300 / speed)
         embers(scene, defPos.x, defPos.y, size)
+        jitter(scene, defender, 4, 220 / speed)
       })
       break
     }
@@ -953,7 +819,8 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
         async () => {
           const hand = { x: atkPos.x + dir * size * 0.2, y: atkPos.y + size * 0.05 }
           if (!deco) return wait(scene, 140 / speed)
-          await acornShot(scene, hand, defPos, size, speed)
+          // Bow: стрела по дуге с хвостом
+          await arrowShot(scene, hand, defPos, size * 0.8, speed)
           impactStar(scene, defPos.x, defPos.y, size, 0xffd166, speed)
           floatText(scene, defPos.x + dir * size * 0.15, defPos.y - size * 0.5, "БАМ", "#ffe08a", speed, {
             size: size * 0.13,
@@ -982,7 +849,8 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
         async () => {
           const hand = { x: atkPos.x + dir * size * 0.2, y: atkPos.y - size * 0.05 }
           if (!deco) return wait(scene, 140 / speed)
-          await bandageThrow(scene, hand, defPos, size, speed)
+          // White Magic: светлый сгусток с рунами
+          await magicBolt(scene, hand, defPos, size * 0.7, speed, LIGHT_MAGIC)
           floatText(scene, defPos.x, defPos.y - size * 0.45, "шлёп", "#e9ecef", speed, {
             size: size * 0.1,
             rise: size * 0.2,
@@ -1002,9 +870,12 @@ export function playAttackFx(ctx: AttackFxCtx): AttackFxResult {
         async () => {
           const mouth = { x: atkPos.x + dir * size * 0.15, y: atkPos.y }
           if (!deco) return wait(scene, 120 / speed)
+          // Gauntlet: волна удара кулаком и ударная волна у цели
           await purrWave(scene, mouth, defPos, size, speed)
+          shockRing(scene, defPos.x, defPos.y, size * 0.8, speed)
           tintFor(scene, defender, 0xffb3c6, 80 / speed, 220 / speed)
-          squash(scene, defender, 0.92, 160 / speed)
+          squash(scene, defender, 0.85, 180 / speed)
+          knockback(scene, defender, dir * size * 0.15, 220 / speed)
         },
         6
       )
@@ -1038,9 +909,14 @@ export function playQuickAttackFx(ctx: AttackFxCtx): AttackFxResult {
       impactAt = Promise.resolve()
       break
     case "hiss":
-      impactAt = hissCone(scene, { x: atkPos.x + dir * size * 0.25, y: atkPos.y }, defPos, size, dir, speed, 0.8).then(
-        () => embers(scene, defPos.x, defPos.y, size * 0.8)
-      )
+      impactAt = magicBolt(
+        scene,
+        { x: atkPos.x + dir * size * 0.25, y: atkPos.y },
+        defPos,
+        size * 0.7,
+        speed,
+        DARK_MAGIC
+      ).then(() => embers(scene, defPos.x, defPos.y, size * 0.8))
       break
     case "howl":
       impactAt = howlRings(
@@ -1057,7 +933,7 @@ export function playQuickAttackFx(ctx: AttackFxCtx): AttackFxResult {
       impactAt = wait(scene, 120 / speed)
       break
     case "slingshot":
-      impactAt = acornShot(scene, { x: atkPos.x + dir * size * 0.25, y: atkPos.y }, defPos, size, speed, 0.9).then(() =>
+      impactAt = arrowShot(scene, { x: atkPos.x + dir * size * 0.25, y: atkPos.y }, defPos, size, speed).then(() =>
         impactStar(scene, defPos.x, defPos.y, size, 0xffd166, speed)
       )
       break
@@ -1065,7 +941,14 @@ export function playQuickAttackFx(ctx: AttackFxCtx): AttackFxResult {
       impactAt = burrFan(scene, { x: atkPos.x + dir * size * 0.25, y: atkPos.y }, defPos, size, speed, 2, 300, 0.8)
       break
     case "bandage":
-      impactAt = bandageThrow(scene, { x: atkPos.x + dir * size * 0.25, y: atkPos.y }, defPos, size, speed, 0.8)
+      impactAt = magicBolt(
+        scene,
+        { x: atkPos.x + dir * size * 0.25, y: atkPos.y },
+        defPos,
+        size * 0.6,
+        speed,
+        LIGHT_MAGIC
+      )
       break
     case "purr":
     default:

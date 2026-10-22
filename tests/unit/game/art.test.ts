@@ -19,6 +19,8 @@ import { generateUnit } from "@game/core/units"
 import type { TerrainId } from "@game/core/types"
 import { CLASS_OUTFITS } from "@game/art/outfits"
 import { mountOf } from "@shared/character/classes"
+import { TILE_FRAME_COUNT, TILE_VARIANTS, groundSvg, tileEdgeSvg } from "@game/art/tile"
+import { backdropLayersSvg } from "@game/art/backdrop"
 
 const CLASSES = CLASS_IDS.flatMap(id => classWeapons(id).map(w => classDef(id, w)))
 
@@ -152,5 +154,32 @@ describe("арт: фоны и тайлы", () => {
     // кадры воды действительно различаются
     expect(tileSvg("yard", "water", 0)).not.toBe(tileSvg("yard", "water", 1))
     expect(tileSvg("jungle", "forest", 0)).not.toBe(tileSvg("jungle", "forest", 1))
+  })
+  it("варианты тайлов, накладки краёв и земля вокруг поля", () => {
+    for (const b of BIOMES) {
+      for (const t of TERRAINS) {
+        const variants = TILE_VARIANTS[t] ?? 1
+        const frames = TILE_FRAME_COUNT[t] ?? 1
+        for (let v = 0; v < variants; v++) for (let f = 0; f < frames; f++) wellFormed(tileSvg(b.id, t, f, v))
+      }
+      for (const k of ["shore", "shade", "rubble"] as const) for (const f of [0, 1]) wellFormed(tileEdgeSvg(b.id, k, f))
+      wellFormed(groundSvg(b.id))
+    }
+    // варианты действительно разные: поле не выглядит плиткой
+    expect(tileSvg("yard", "plain", 0, 0)).not.toBe(tileSvg("yard", "plain", 0, 1))
+    expect(tileSvg("basement", "forest", 0, 0)).not.toBe(tileSvg("basement", "forest", 0, 1))
+    // 4 кадра воды, все разные
+    const water = [0, 1, 2, 3].map(f => tileSvg("yard", "water", f))
+    expect(new Set(water).size).toBe(4)
+  })
+  it("слои фона кинематика: дальний, средний и ближний план", () => {
+    for (const b of BIOMES) {
+      for (const t of TERRAINS) {
+        const layers = backdropLayersSvg(b.id, t, "left")
+        wellFormed(layers.far)
+        wellFormed(layers.mid)
+        wellFormed(layers.near)
+      }
+    }
   })
 })

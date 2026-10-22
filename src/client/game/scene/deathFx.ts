@@ -4,8 +4,20 @@ import type { ArtWeapon } from "@game/art/index"
 import { CRITTER_PART_ANCHORS, type CritterPart } from "@game/art/index"
 import { FUR_PALETTES } from "@game/content/appearance"
 import { TEX } from "./textures"
-import { BLOOD_COLORS, textStyle } from "./style"
+import { textStyle } from "./style"
 import { bloodBurst, dustPuff, sceneAlive, tween, wait } from "./fx"
+import {
+  GORE_TEX,
+  bloodDrip,
+  bloodFountain,
+  bloodSquirt,
+  ensureGoreTextures,
+  goreEnabled,
+  groundStain,
+  hitGore,
+  screenBloodSplat
+} from "./gore"
+import { reducedMotion } from "@game/ui/lib/animate"
 import { UnitView } from "./UnitView"
 import { ensureUnitPartTextures, hasTexture, withTimeout, type UnitTexSize } from "./svgTextures"
 
@@ -320,10 +332,10 @@ function punchText(
 /** Кровавый шлепок на земле. Не блокирует. */
 function splatAt(b: Body, x: number, y: number, scale: number, seed: number): void {
   if (!sceneAlive(b.scene)) return
+  ensureGoreTextures(b.scene)
   const img = b.scene.add
-    .image(x, y, TEX.splat)
-    .setTint(BLOOD_COLORS[seed % BLOOD_COLORS.length] ?? 0xd9122b)
-    .setAlpha(0.8)
+    .image(x, y, GORE_TEX.splat(seed))
+    .setAlpha(0.92)
   img
     .setDisplaySize(scale, scale)
     .setRotation((seed * 1.7) % 6.28)
@@ -418,7 +430,8 @@ async function fly(
   spin: number,
   speed: number,
   bounces: number,
-  onLand?: (x: number, y: number, n: number) => void
+  onLand?: (x: number, y: number, n: number) => void,
+  onStep?: (x: number, y: number) => void
 ): Promise<void> {
   let x = obj.x
   let y = obj.y
@@ -446,6 +459,7 @@ async function fly(
         obj.x = start.x + start.vx * tt
         obj.y = start.y + start.vy * tt + 0.5 * g * tt * tt
         obj.angle = start.angle + sp * tt
+        onStep?.(obj.x, obj.y)
       }
     })
     if (!obj.scene) return
@@ -462,24 +476,136 @@ async function fly(
   }
 }
 
+/* ---------- Кровь гибели ---------- */
+
+/** Масштаб кровавых эффектов: клетка на карте, половина роста спрайта в кинематике. */
+function fxSize(ctx: DeathCtx, b: Body): number {
+  return b.mode === "cine" ? b.h * 0.45 : ctx.size
+}
+
+/** Выплеск крови из точки тела: брызги, капли с пятнами на земле под телом. */
+function gush(
+  ctx: DeathCtx,
+  b: Body,
+  x: number,
+  y: number,
+  power: number,
+  kind: "slash" | "pierce" | "blunt" | "magic" | "arrow" = "slash",
+  dirY = -0.5
+): void {
+  hitGore(b.scene, {
+    x,
+    y,
+    size: fxSize(ctx, b),
+    dirX: ctx.dir,
+    dirY,
+    damage: Math.max(1, Math.round(power * 10)),
+    maxHp: 10,
+    lethal: false,
+    speed: ctx.speed,
+    depth: b.mode === "cine" ? 24 : 24,
+    ground: { x, y: ctx.y },
+    kind
+  })
+}
+
+/** Фонтан из точки тела вверх с каплями вокруг. */
+function fountain(ctx: DeathCtx, b: Body, x: number, y: number, ms: number): void {
+  bloodFountain(b.scene, x, y, ctx.y, fxSize(ctx, b), ms, ctx.speed)
+}
+
+/** Капли за летящей частью: не чаще раза в ~55 мс. */
+function dripper(ctx: DeathCtx, b: Body): (x: number, y: number) => void {
+  let last = 0
+  return (x, y) => {
+    const now = b.scene.time.now
+    if (now - last < 55 / ctx.speed) return
+    last = now
+    bloodDrip(b.scene, x, y, ctx.y + 2, fxSize(ctx, b), ctx.speed)
+  }
+}
+
+/** Кровавые кусочки разлетаются и шлёпаются на землю. */
+function chunks(ctx: DeathCtx, b: Body, rng: () => number, count: number): Promise<void>[] {
+  if (!sceneAlive(b.scene)) return []
+  ensureGoreTextures(b.scene)
+  const s = fxSize(ctx, b)
+  const n = goreEnabled().level === "sea" ? count : Math.ceil(count / 2)
+  const out: Promise<void>[] = []
+  const cy = ctx.y - b.h * 0.45
+  for (let i = 0; i < n; i++) {
+    const img = b.scene.add.image(ctx.x, cy, GORE_TEX.chunk).setDepth(b.depth + 0.2)
+    const w = s * (0.1 + rng() * 0.12)
+    img.setDisplaySize(w, w * (0.8 + rng() * 0.4))
+    b.temps.push(img)
+    const vx = (rng() - 0.5) * s * 4.2 + ctx.dir * s * 0.8
+    const vy = -s * (1.6 + rng() * 2.2)
+    const seed = Math.round(rng() * 1000)
+    out.push(
+      fly(b.scene, img, vx, vy, s * 9, ctx.y + (rng() - 0.5) * s * 0.2, (rng() - 0.5) * 900, ctx.speed, 1, (x, y, k) => {
+        if (k === 0) groundStain(b.scene, x, y, s * 1.4, seed)
+      }, dripper(ctx, b))
+    )
+  }
+  return out
+}
+
+/**
+ * Момент добивания: hit-stop (твины почти замирают на ~100 мс), белая вспышка тела, красная вспышка камеры,
+ * брызги на камеру и тряска. Общий пролог всех вариантов.
+ */
+async function killMoment(ctx: DeathCtx, b: Body): Promise<void> {
+  const sp = ctx.speed
+  const calm = reducedMotion()
+  flash(b, 110 / sp)
+  const tw = b.scene.tweens
+  const prev = tw.timeScale
+  tw.timeScale = prev * 0.06
+  try {
+    screenBloodSplat(b.scene, b.mode === "cine" ? 0.9 : 0.55, sp)
+    await wait(b.scene, (calm ? 40 : 100) / sp)
+  }
+  finally {
+    if (sceneAlive(b.scene)) tw.timeScale = prev
+  }
+  if (!alive(b)) return
+  if (!calm) b.scene.cameras.main.shake(240 / sp, b.mode === "cine" ? 0.018 : 0.01)
+  gush(ctx, b, ctx.x, ctx.y - b.h * 0.5, 1, ctx.killerKind === "hiss" ? "magic" : "slash", -0.3)
+}
+
+/** Короткие судороги лежащего тела. */
+async function twitch(b: Body, sp: number): Promise<void> {
+  for (let i = 0; i < 2; i++) {
+    if (!alive(b)) return
+    const a = b.t.angle
+    await tween(b.scene, { targets: b.t, angle: a + (i % 2 ? -6 : 6), duration: 70 / sp, yoyo: true })
+  }
+}
+
 /* ---------- Варианты ---------- */
 
 type VariantFn = (ctx: DeathCtx, b: Body, rng: () => number) => Promise<void>
 
 const fall: VariantFn = async (ctx, b) => {
   const sp = ctx.speed
-  flash(b, 80 / sp)
-  b.scene.cameras.main.shake(200 / sp, b.mode === "cine" ? 0.02 : 0.012)
   bloodBurst(b.scene, ctx.x, ctx.y - b.h * 0.45, b.mode === "cine" ? 55 : 50, null, b.mode === "cine" ? 1.8 : 1.1, sp)
+  // Шатается, из раны бьёт струя, затем валится набок с отскоком
+  bloodSquirt(b.scene, ctx.x, ctx.y - b.h * 0.55, fxSize(ctx, b), ctx.dir > 0 ? -60 : -120, 420 / sp, 24, ctx.y)
+  await tween(b.scene, { targets: b.t, angle: -ctx.dir * 8, duration: 120 / sp, yoyo: true, ease: "Sine.easeInOut" })
+  if (!alive(b)) return
   ctx.onPool?.()
   await tween(b.scene, {
     targets: b.t,
     angle: ctx.dir > 0 ? 90 : -90,
     y: b.y0 + (b.mode === "map" ? ctx.size * 0.2 : 0),
-    alpha: 0.85,
+    alpha: 0.9,
     duration: 450 / sp,
     ease: "Bounce.easeOut"
   })
+  if (!alive(b)) return
+  gush(ctx, b, ctx.x + ctx.dir * b.w * 0.3, ctx.y - b.h * 0.1, 0.6, "blunt", -1)
+  dustPuff(b.scene, ctx.x, ctx.y, b.h * 0.5, 8)
+  await twitch(b, sp)
 }
 
 const gibs: VariantFn = async (ctx, b, rng) => {
@@ -531,14 +657,29 @@ const gibs: VariantFn = async (ctx, b, rng) => {
     const spin = (rng() < 0.5 ? -1 : 1) * (360 + rng() * 360)
     const partSeed = seed++
     flights.push(
-      fly(b.scene, img, vx, vy, g, ctx.y - halfH[part] * s, spin, sp, 1, (x, y, n) => {
-        splatAt(b, x, ctx.y + 2, s * (n === 0 ? 0.22 : 0.14), partSeed * 3 + n)
-        if (n === 0) bloodBurst(b.scene, x, y, 6, { min: 220, max: 320 }, 0.6, sp)
-      })
+      fly(
+        b.scene,
+        img,
+        vx,
+        vy,
+        g,
+        ctx.y - halfH[part] * s,
+        spin,
+        sp,
+        2,
+        (x, y, n) => {
+          splatAt(b, x, ctx.y + 2, s * (n === 0 ? 0.3 : 0.18), partSeed * 3 + n)
+          if (n === 0) gush(ctx, b, x, y, 0.45, "blunt", -1)
+        },
+        dripper(ctx, b)
+      )
     )
   }
+  // Фонтан из места, где стоял, и кровавые кусочки
+  fountain(ctx, b, ctx.x, ctx.y - s * 0.35, 700)
+  flights.push(...chunks(ctx, b, rng, 8))
   ctx.onPool?.()
-  await Promise.race([Promise.all(flights), wait(b.scene, 1400 / sp)])
+  await Promise.race([Promise.all(flights), wait(b.scene, 1600 / sp)])
 }
 
 const explode: VariantFn = async (ctx, b) => {
@@ -567,6 +708,11 @@ const explode: VariantFn = async (ctx, b) => {
   })
   shockRing(b.scene, cx, cy, s, 0xffffff, 380 / sp)
   shockRing(b.scene, cx, cy, s * 0.8, 0xff6b6b, 300 / sp)
+  shockRing(b.scene, cx, cy, s * 1.2, 0xd9122b, 460 / sp)
+  gush(ctx, b, cx, cy, 1, "blunt", 0)
+  screenBloodSplat(b.scene, b.mode === "cine" ? 1 : 0.7, sp)
+  const bits = chunks(ctx, b, () => Math.random(), 12)
+  fountain(ctx, b, ctx.x, ctx.y - s * 0.1, 450)
   // Дым
   for (let i = 0; i < 5; i++) {
     const sm = b.scene.add
@@ -596,7 +742,7 @@ const explode: VariantFn = async (ctx, b) => {
   b.scene.tweens.add({ targets: scorch, alpha: 0.5, duration: 200 / sp })
   b.temps.push(scorch)
   ctx.onPool?.()
-  await wait(b.scene, 450 / sp)
+  await Promise.race([Promise.all(bits), wait(b.scene, 900 / sp)])
 }
 
 const flatten: VariantFn = async (ctx, b) => {
@@ -628,10 +774,14 @@ const flatten: VariantFn = async (ctx, b) => {
     sp
   )
   dustPuff(b.scene, ctx.x, ctx.y, s * 0.5, 10)
+  // Сплющило — кровь бьёт струями в обе стороны и кляксой во все
+  bloodSquirt(b.scene, ctx.x - s * 0.3, ctx.y - s * 0.05, fxSize(ctx, b), -160, 300 / sp, 24, ctx.y)
+  bloodSquirt(b.scene, ctx.x + s * 0.3, ctx.y - s * 0.05, fxSize(ctx, b), -20, 300 / sp, 24, ctx.y)
+  gush(ctx, b, ctx.x, ctx.y - s * 0.05, 1, "blunt", -0.2)
   ctx.onPool?.()
+  ensureGoreTextures(b.scene)
   const pool = b.scene.add
-    .image(ctx.x, ctx.y + 2, TEX.pool)
-    .setTint(0xd9122b)
+    .image(ctx.x, ctx.y + 2, GORE_TEX.pool(3))
     .setAlpha(0)
     .setDepth(b.mode === "cine" ? 6 : 1.4)
   pool.setDisplaySize(s * 0.4, s * 0.15)
@@ -662,6 +812,7 @@ const launch: VariantFn = async (ctx, b) => {
     b.mode === "cine" ? 1.6 : 1,
     sp
   )
+  gush(ctx, b, ctx.x, ctx.y - s * 0.45, 1, "blunt", -0.6)
   ctx.onPool?.()
   const dist = b.mode === "cine" ? b.scene.scale.width * 0.9 : ctx.size * 2.1
   const up = b.mode === "cine" ? s * 0.6 : ctx.size * 0.8
@@ -675,11 +826,12 @@ const launch: VariantFn = async (ctx, b) => {
     delay: 70 / sp,
     loop: true,
     callback: () => {
-      if (!alive(b) || trail++ > 7) return
+      if (!alive(b) || trail++ > 9) return
       const pt = b.mode === "map" ? (b.t as Phaser.GameObjects.Container).getWorldTransformMatrix() : null
       const wx = pt ? pt.tx : b.t.x
       const wy = pt ? pt.ty - s * 0.45 : b.t.y - s * 0.45
-      bloodBurst(b.scene, wx, wy, 4, { min: 60, max: 120 }, 0.5, sp)
+      bloodBurst(b.scene, wx, wy, 5, { min: 60, max: 120 }, 0.5, sp)
+      bloodDrip(b.scene, wx, wy, ctx.y + 2, fxSize(ctx, b), sp)
     }
   })
   await tween(b.scene, {
@@ -743,6 +895,14 @@ const dissolve: VariantFn = async (ctx, b) => {
       })
     })
   }
+  // Тает в кровавый туман: капли стекают на землю
+  for (let i = 0; i < 6; i++) {
+    b.scene.time.delayedCall((i * 90) / sp, () => {
+      if (!alive(b)) return
+      bloodDrip(b.scene, b.left + b.w * (0.2 + 0.6 * ((i * 37) % 10) / 10), b.top + b.h * 0.7, ctx.y + 2, fxSize(ctx, b), sp)
+    })
+  }
+  gush(ctx, b, cx, cy, 0.7, "magic", -1)
   // Тёмный силуэт остаётся ненадолго
   const sil = b.scene.add
     .image(cx, cy, TEX.disc)
@@ -774,13 +934,26 @@ const drill: VariantFn = async (ctx, b) => {
     callback: () => dustPuff(b.scene, ctx.x, ctx.y, s * 0.4, 6)
   })
   bloodBurst(b.scene, ctx.x, ctx.y - s * 0.4, b.mode === "cine" ? 20 : 12, { min: 220, max: 320 }, 1, sp)
+  // Кровь разлетается спиралью, пока ввинчивается в землю
+  let turn = 0
+  const spiral = b.scene.time.addEvent({
+    delay: 90 / sp,
+    repeat: 7,
+    callback: () => {
+      if (!alive(b)) return
+      const a = (turn++ * 75) % 360
+      bloodBurst(b.scene, ctx.x, ctx.y - s * 0.2, 6, { min: a - 15, max: a + 15 }, b.mode === "cine" ? 1.2 : 0.7, sp)
+    }
+  })
   await Promise.all([
     tween(b.scene, { targets: b.t, angle: 1800, duration: 820 / sp, ease: "Quad.easeIn" }),
     scaleFromFeet(b, 0.45, 0.1, 820 / sp, "Quad.easeIn")
   ])
   dustTimer.remove(false)
+  spiral.remove(false)
   if (!alive(b)) return
   hideBody(b)
+  gush(ctx, b, ctx.x, ctx.y, 0.8, "blunt", -1)
   const hole = b.scene.add
     .image(ctx.x, ctx.y, TEX.disc)
     .setTint(0x15100e)
@@ -840,9 +1013,17 @@ const crumble: VariantFn = async (ctx, b, rng) => {
     b.temps.push(chunk)
     const vx = (rng() - 0.5) * s * 0.9
     const vy = -s * (0.2 + rng() * 0.6)
-    flights.push(fly(b.scene, chunk, vx, vy, s * 3.5, groundY, (rng() - 0.5) * 400, sp, 1))
+    flights.push(
+      fly(b.scene, chunk, vx, vy, s * 3.5, groundY, (rng() - 0.5) * 400, sp, 1, frozen
+        ? undefined
+        : (x) => {
+            groundStain(b.scene, x, groundY, fxSize(ctx, b), i * 7)
+          })
+    )
   }
   dustPuff(b.scene, ctx.x, ctx.y, s * 0.6, 12)
+  // Каменная скорлупа лопается — изнутри всё равно кровь
+  if (!frozen) gush(ctx, b, ctx.x, ctx.y - s * 0.4, 0.9, "blunt", -0.6)
   puff(
     b.scene,
     ctx.x,
@@ -916,6 +1097,7 @@ const electro: VariantFn = async (ctx, b, rng) => {
     life: [600, 900]
   })
   bloodBurst(b.scene, ctx.x, ctx.y - s * 0.45, b.mode === "cine" ? 18 : 10, null, 0.9, sp)
+  gush(ctx, b, ctx.x, ctx.y - s * 0.5, 0.8, "magic", -1)
   ctx.onPool?.()
   await tween(b.scene, {
     targets: b.t,
@@ -925,6 +1107,7 @@ const electro: VariantFn = async (ctx, b, rng) => {
     duration: 420 / sp,
     ease: "Bounce.easeOut"
   })
+  await twitch(b, sp)
 }
 
 const ragdoll: VariantFn = async (ctx, b) => {
@@ -962,8 +1145,9 @@ const ragdoll: VariantFn = async (ctx, b) => {
     angle = na
     const pt = b.mode === "map" ? (b.t as Phaser.GameObjects.Container).getWorldTransformMatrix() : null
     const wx = pt ? pt.tx : b.t.x
-    splatAt(b, wx, ctx.y + 2, s * (0.3 - seed * 0.06), 5 + seed)
+    splatAt(b, wx, ctx.y + 2, s * (0.36 - seed * 0.06), 5 + seed)
     bloodBurst(b.scene, wx, ctx.y, 8, { min: 220, max: 320 }, 0.7, sp)
+    gush(ctx, b, wx, ctx.y - s * 0.15, 0.7 - seed * 0.15, "blunt", -1)
     dustPuff(b.scene, wx, ctx.y, s * 0.35, 5)
     b.scene.cameras.main.shake(80 / sp, 0.006)
     seed++
@@ -983,11 +1167,11 @@ const ragdoll: VariantFn = async (ctx, b) => {
 const sink: VariantFn = async (ctx, b) => {
   const sp = ctx.speed
   const s = b.h
-  flash(b, 60 / sp)
+  fountain(ctx, b, ctx.x, ctx.y - s * 0.4, 380)
   ctx.onPool?.()
+  ensureGoreTextures(b.scene)
   const pool = b.scene.add
-    .image(ctx.x, ctx.y + 2, TEX.pool)
-    .setTint(0xd9122b)
+    .image(ctx.x, ctx.y + 2, GORE_TEX.pool(1))
     .setAlpha(0)
     .setDepth(b.mode === "cine" ? 6 : 1.4)
   pool.setDisplaySize(s * 0.2, s * 0.08)
@@ -1071,6 +1255,8 @@ async function playDeath(ctx: DeathCtx, mode: Mode): Promise<void> {
   if (variant === "gibs" && !ctx.parts) variant = "explode"
   const rng = makeRng(hash(`${ctx.unit.id}:${variant}:${ctx.unit.seed}`))
   try {
+    await killMoment(ctx, b)
+    if (!alive(b)) return
     await VARIANTS[variant](ctx, b, rng)
   }
   catch (e) {

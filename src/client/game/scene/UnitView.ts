@@ -8,6 +8,20 @@ import { TEX } from "./textures"
 import { MOVE_GLYPH, WEAPON_COLOR_HEX, hexCss, hpColor, textStyle } from "./style"
 import { ensureUnitTexture, ensureUnitTextures, hasTexture, unitTexKey } from "./svgTextures"
 import { dustPuff, tween } from "./fx"
+import { MTEX, ensureMotionTextures, reducedMotion } from "./motionFx"
+
+/** Походка по клеткам: пехота прыгает, кавалерия скачет галопом, броня тяжело ступает, летуны парят. */
+export type Gait = "infantry" | "cavalry" | "armored" | "flier"
+
+export interface StepOptions {
+  /** Мс на клетку (уже с учётом скорости анимации). */
+  ms: number
+  /** Первая клетка пути — разгон, последняя — торможение. */
+  first: boolean
+  last: boolean
+  /** Вызывается в момент касания земли (следы, пыль). */
+  onLand?: () => void
+}
 
 export interface UnitViewOptions {
   size: number
@@ -67,6 +81,21 @@ export class UnitView extends Phaser.GameObjects.Container {
   private lifePaused = false
   private blinkCount = 0
   private hopTween: Phaser.Tweens.Tween | null = null
+  /* Покачивание, парение летуна, выделение, «уже ходил», разворот */
+  private sway: Phaser.Tweens.Tween | null = null
+  private bob: Phaser.Tweens.Tween | null = null
+  readonly gait: Gait
+  private selected = false
+  private selRing: Phaser.GameObjects.Image | null = null
+  private selGlow: Phaser.GameObjects.Image | null = null
+  private selTweens: Phaser.Tweens.Tween[] = []
+  private glowFx: Phaser.FX.Glow | null = null
+  private actedFx: Phaser.FX.ColorMatrix | null = null
+  private acted = false
+  private flipTween: Phaser.Tweens.Tween | null = null
+  private hitTweens: Phaser.Tweens.Tween[] = []
+  private lowHp = false
+  private hpFlash: Phaser.GameObjects.Graphics | null = null
 
   constructor(scene: Phaser.Scene, unit: UnitInstance, side: Side, opts: UnitViewOptions) {
     super(scene, 0, 0)
@@ -78,11 +107,14 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.facing = side === "enemy" ? -1 : 1
     const cls = unitClass(unit)
     const weapon = weaponDef(unit.skills.weapon)
+    this.gait = cls.moveType
     this.furColor = FUR_PALETTES[unit.appearance.furPalette]?.color ?? 0xcccccc
     this.weaponColor = WEAPON_COLOR_HEX[weapon.color]
     this.hasSpecial = !!unit.skills.special
 
+    ensureMotionTextures(scene)
     this.shadow = scene.add.image(0, 0, TEX.disc).setTint(this.weaponColor).setAlpha(0.55)
+    // Мягкая тень-пятно под лапами (тёмная), над ней цветной диск оружия
     this.rig = scene.add.container(0, 0)
     this.add([this.shadow, this.rig])
 
@@ -135,11 +167,14 @@ export class UnitView extends Phaser.GameObjects.Container {
   private startLife(): void {
     if (!this.scene || this.dead) return
     const r = this.seedFromId()
+    // Раненый (HP < 35 %) дышит тяжело и чаще, сильнее пошатывается
+    const heavy = this.lowHp
     if (!this.breath) {
-      const dur = 2200 + Math.round(r * 600)
+      const dur = heavy ? 760 + Math.round(r * 200) : 2000 + Math.round(r * 600)
       this.breath = this.scene.tweens.add({
         targets: this.rig,
-        scaleY: 1.03,
+        scaleY: heavy ? 1.06 : 1.035,
+        scaleX: heavy ? 0.97 : 0.985,
         duration: dur,
         yoyo: true,
         repeat: -1,
@@ -147,6 +182,20 @@ export class UnitView extends Phaser.GameObjects.Container {
         delay: Math.round(r * dur)
       })
     }
+    if (!this.sway && !reducedMotion()) {
+      const amp = heavy ? 4.5 : 1.6
+      this.rig.setAngle(-amp)
+      this.sway = this.scene.tweens.add({
+        targets: this.rig,
+        angle: amp,
+        duration: heavy ? 1300 : 2600 + Math.round(r * 900),
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+        delay: Math.round(r * 1000)
+      })
+    }
+    if (this.gait === "flier" && !this.bob) this.startBob()
     this.scheduleBlink()
   }
 
@@ -172,6 +221,36 @@ export class UnitView extends Phaser.GameObjects.Container {
     })
   }
 
+  /** Высота парения летуна над землёй (в пикселях, вверх — минус). */
+  private floatY(): number {
+    return this.gait === "flier" ? -this.size * 0.12 : 0
+  }
+
+  /** Летун мягко парит: тело покачивается вверх-вниз, тень на земле дышит в такт. */
+  private startBob(): void {
+    if (!this.scene || this.bob) return
+    const base = this.floatY()
+    this.bob = this.scene.tweens.add({
+      targets: this.rig,
+      y: { from: base, to: base - this.size * 0.06 },
+      duration: 900 + Math.round(this.seedFromId() * 300),
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+      onUpdate: () => this.syncShadow()
+    })
+  }
+
+  /** Тень реагирует на высоту тела: чем выше прыжок, тем меньше и прозрачнее. */
+  private syncShadow(): void {
+    if (!this.scene) return
+    const lift = Math.max(0, -this.rig.y) / Math.max(1, this.size)
+    const k = Math.max(0.45, 1 - lift * 1.2)
+    const base = this.lifted ? 0.7 : 1
+    this.shadow.setDisplaySize(this.size * 0.7 * base * k, this.size * 0.25 * base * k)
+    this.shadow.setAlpha((this.lifted ? 0.35 : 0.55) * (0.5 + 0.5 * k))
+  }
+
   /** Приостановить дыхание (подъём, приземление, смерть) — тело возвращается к масштабу 1. */
   private pauseLife(): void {
     this.lifePaused = true
@@ -179,12 +258,17 @@ export class UnitView extends Phaser.GameObjects.Container {
       this.breath.stop()
       this.breath = null
     }
+    this.sway?.stop()
+    this.sway = null
+    this.bob?.stop()
+    this.bob = null
+    if (this.scene) this.rig.setAngle(0)
     if (this.blinkBack) {
       this.blinkBack.remove(false)
       this.blinkBack = null
       if (this.pose === "blink" && !this.dead) this.setPose("idle")
     }
-    if (this.scene) this.rig.setScale(this.rig.scaleX, 1)
+    if (this.scene) this.rig.setScale(1, 1)
   }
 
   private resumeLife(): void {
@@ -197,16 +281,31 @@ export class UnitView extends Phaser.GameObjects.Container {
   hop(): void {
     if (!this.scene || this.dead || this.lifted) return
     this.hopTween?.stop()
-    const y0 = 0
+    const y0 = this.floatY()
+    this.bob?.stop()
+    this.bob = null
     this.hopTween = this.scene.tweens.add({
       targets: this.rig,
-      y: y0 - 10,
-      duration: 90,
+      y: y0 - this.size * 0.22,
+      duration: 130,
       yoyo: true,
       ease: "Quad.easeOut",
+      onUpdate: () => this.syncShadow(),
       onComplete: () => {
         this.hopTween = null
-        if (this.scene && !this.lifted) this.rig.setY(0)
+        if (!this.scene || this.lifted) return
+        this.rig.setY(y0)
+        this.syncShadow()
+        // Приземление: короткое сплющивание
+        this.scene.tweens.add({
+          targets: this.rig,
+          scaleX: 1.14,
+          scaleY: 0.86,
+          duration: 60,
+          yoyo: true,
+          ease: "Quad.easeOut"
+        })
+        if (this.gait === "flier" && !this.lifePaused) this.startBob()
       }
     })
   }
@@ -237,6 +336,9 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.shadow.setDisplaySize(size * 0.7 * k, size * 0.25 * k)
     this.shadow.setAlpha(this.lifted ? 0.35 : 0.55)
     this.shadow.setPosition(0, feetY)
+    if (this.gait === "flier" && !this.lifted) this.syncShadow()
+    this.selRing?.setPosition(0, feetY)
+    this.selGlow?.setPosition(0, feetY)
     if (this.sprite) {
       const h = size * 1.05
       const w = h * ART_RATIO
@@ -271,10 +373,54 @@ export class UnitView extends Phaser.GameObjects.Container {
   }
 
   setHp(hp: number, maxHp: number): void {
+    const prev = this.hp
     this.hp = Math.max(0, hp)
     this.maxHp = Math.max(1, maxHp)
     if (!this.scene) return
     this.redrawHp()
+    if (this.hp > prev && prev > 0) this.flashHp(0x80ed99)
+    // Переход через порог «тяжело ранен» — перезапустить дыхание с другим ритмом
+    const low = this.hp > 0 && this.hp / this.maxHp < 0.35
+    if (low !== this.lowHp) {
+      this.lowHp = low
+      if (!this.lifePaused && !this.dead) {
+        this.breath?.stop()
+        this.breath = null
+        this.sway?.stop()
+        this.sway = null
+        this.rig.setScale(1).setAngle(0)
+        this.startLife()
+      }
+    }
+  }
+
+  /** Доля оставшегося HP (0…1). */
+  hpFrac(): number {
+    return Math.max(0, Math.min(1, this.hp / this.maxHp))
+  }
+
+  /** Подсветка полоски HP (зелёная — лечение). */
+  flashHp(color: number): void {
+    if (!this.scene || !this.showHp) return
+    this.hpFlash?.destroy()
+    const w = this.size * 0.78
+    const h = Math.max(3, this.size * 0.09)
+    const g = this.scene.add.graphics()
+    g.fillStyle(color, 1)
+    g.fillRect(-w / 2 - 2, this.size * 0.38 - 2, w + 4, h + 4)
+    g.setBlendMode(Phaser.BlendModes.ADD)
+    this.add(g)
+    this.hpFlash = g
+    this.scene.tweens.add({
+      targets: g,
+      alpha: 0,
+      duration: 700,
+      ease: "Quad.easeIn",
+      onComplete: () => {
+        g.destroy()
+        if (this.hpFlash === g) this.hpFlash = null
+      }
+    })
   }
 
   getHp(): number {
@@ -288,16 +434,260 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.cdBg.setTint(cd <= 0 ? 0x7a5c00 : 0x222222)
   }
 
+  /** «Уже ходил»: фигурка обесцвечивается и чуть гаснет, без потери читаемости. */
   setActed(acted: boolean): void {
-    this.setAlpha(acted ? 0.45 : 1)
+    if (!this.scene) return
+    this.setAlpha(acted ? 0.82 : 1)
+    if (acted === this.acted) return
+    this.acted = acted
+    const fx = this.sprite?.preFX
+    if (fx) {
+      if (acted && !this.actedFx) {
+        this.actedFx = fx.addColorMatrix()
+        this.actedFx.grayscale(0.85).brightness(0.82, true)
+      }
+      else if (!acted && this.actedFx) {
+        fx.remove(this.actedFx as unknown as Phaser.FX.Controller)
+        this.actedFx = null
+      }
+    }
+    else if (this.sprite && !this.invalidTint) {
+      if (acted) this.sprite.setTint(0x8a8a8a)
+      else this.sprite.clearTint()
+    }
+  }
+
+  /**
+   * Выделение: кольцо у ног пульсирует, под ним мягкое свечение, фигурка получает светящийся контур
+   * и пружинит. Цвет — по стороне (игрок — голубой, враг — красный).
+   */
+  setSelected(on: boolean): void {
+    if (!this.scene || this.selected === on) return
+    this.selected = on
+    for (const t of this.selTweens) t.stop()
+    this.selTweens = []
+    this.selRing?.destroy()
+    this.selGlow?.destroy()
+    this.selRing = null
+    this.selGlow = null
+    if (this.glowFx && this.sprite?.preFX) this.sprite.preFX.remove(this.glowFx)
+    this.glowFx = null
+    if (!on || this.dead) return
+    const color = this.side === "player" ? 0x8ecae6 : 0xff6b6b
+    const feetY = this.size * 0.36
+    const glow = this.scene.add.image(0, feetY, MTEX.glow).setTint(color).setBlendMode(Phaser.BlendModes.ADD)
+    glow.setDisplaySize(this.size * 1.1, this.size * 0.5).setAlpha(0.7)
+    const ring = this.scene.add.image(0, feetY, MTEX.ripple).setTint(0xffffff)
+    ring.setDisplaySize(this.size * 0.95, this.size * 0.4)
+    this.addAt(glow, 1)
+    this.addAt(ring, 2)
+    this.selGlow = glow
+    this.selRing = ring
+    const sx = ring.scaleX
+    const sy = ring.scaleY
+    this.selTweens.push(
+      this.scene.tweens.add({
+        targets: ring,
+        scaleX: sx * 1.12,
+        scaleY: sy * 1.12,
+        alpha: 0.55,
+        duration: 520,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      }),
+      this.scene.tweens.add({
+        targets: glow,
+        alpha: 0.35,
+        duration: 700,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut"
+      })
+    )
+    if (this.sprite?.preFX) this.glowFx = this.sprite.preFX.addGlow(0xffffff, 3, 0, false, 0.1, 12)
+    this.hop()
   }
 
   /** Направление взгляда: 1 — вправо, −1 — влево. */
   setFacing(dir: 1 | -1): void {
     if (!this.scene) return
+    const changed = this.facing !== dir
     this.facing = dir
-    this.sprite?.setFlipX(dir < 0)
     this.emoji?.setScale(dir < 0 ? -1 : 1, 1)
+    const sprite = this.sprite
+    if (!sprite) return
+    if (!changed || this.dead || reducedMotion()) {
+      sprite.setFlipX(dir < 0)
+      return
+    }
+    // Плавный разворот: фигурка «схлопывается» по ширине и раскрывается уже в другую сторону
+    this.flipTween?.stop()
+    const base = sprite.scaleX
+    this.flipTween = this.scene.tweens.add({
+      targets: sprite,
+      scaleX: base * 0.08,
+      duration: 55,
+      ease: "Quad.easeIn",
+      onComplete: () => {
+        if (!sprite.scene) return
+        sprite.setFlipX(this.facing < 0)
+        this.flipTween = this.scene.tweens.add({
+          targets: sprite,
+          scaleX: base,
+          duration: 75,
+          ease: "Back.easeOut",
+          onComplete: () => {
+            this.flipTween = null
+          }
+        })
+      }
+    })
+  }
+
+  /**
+   * Реакция на удар: отлёт назад по направлению удара, наклон, белая и затем красная вспышка, дрожь, сплющивание.
+   * strength 0…1.5 (доля HP, спецприём).
+   */
+  takeHit(dirX: number, dirY: number, strength: number, speed = 1): void {
+    if (!this.scene || this.dead) return
+    for (const t of this.hitTweens) t.stop()
+    this.hitTweens = []
+    const len = Math.hypot(dirX, dirY) || 1
+    const k = Math.max(0.4, Math.min(1.5, strength))
+    const dx = (dirX / len) * this.size * 0.16 * k
+    const dy = (dirY / len) * this.size * 0.08 * k
+    const target: Phaser.GameObjects.Image | null = this.sprite ?? this.disc
+    target?.setTintFill(0xffffff)
+    this.scene.time.delayedCall(60 / speed, () => {
+      if (!this.scene || !target?.scene) return
+      target.setTint(0xff5a5a)
+      this.scene.time.delayedCall(140 / speed, () => {
+        if (!target.scene) return
+        if (this.acted && !this.actedFx) target.setTint(0x8a8a8a)
+        else if (this.invalidTint) target.setTint(0xffb3b3)
+        else if (this.sprite) target.clearTint()
+        else this.disc?.setTint(this.furColor)
+      })
+    })
+    const x0 = 0
+    const y0 = this.rig.y
+    this.hitTweens.push(
+      this.scene.tweens.add({
+        targets: this.rig,
+        x: x0 + dx,
+        y: y0 + dy,
+        angle: (dirX >= 0 ? 1 : -1) * 12 * k,
+        scaleX: 1.12,
+        scaleY: 0.86,
+        duration: 70 / speed,
+        ease: "Quad.easeOut",
+        onComplete: () => {
+          if (!this.scene) return
+          // Дрожь и возврат
+          this.hitTweens.push(
+            this.scene.tweens.add({
+              targets: this.rig,
+              x: { from: x0 + dx * 0.6, to: x0 + dx * 0.2 },
+              duration: 30 / speed,
+              yoyo: true,
+              repeat: 2,
+              onComplete: () => {
+                if (!this.scene) return
+                this.hitTweens.push(
+                  this.scene.tweens.add({
+                    targets: this.rig,
+                    x: x0,
+                    y: y0,
+                    angle: 0,
+                    scaleX: 1,
+                    scaleY: 1,
+                    duration: 180 / speed,
+                    ease: "Back.easeOut"
+                  })
+                )
+              }
+            })
+          )
+        }
+      })
+    )
+  }
+
+  /**
+   * Шаг на соседнюю клетку (контейнер едет к x, y): прыжок со сплющиванием на приземлении,
+   * у кавалерии — галоп с раскачкой, у брони — тяжёлый шаг, летун скользит с наклоном.
+   */
+  stepTo(x: number, y: number, o: StepOptions): Promise<void> {
+    if (!this.scene) return Promise.resolve()
+    const scene = this.scene
+    const ease = o.first && o.last ? "Sine.easeInOut" : o.first ? "Quad.easeIn" : o.last ? "Quad.easeOut" : "Linear"
+    const hopH = this.gait === "flier" ? 0 : this.gait === "cavalry" ? 0.1 : this.gait === "armored" ? 0.07 : 0.18
+    const base = this.floatY()
+    this.bob?.stop()
+    this.bob = null
+    const move = new Promise<void>((resolve) => {
+      scene.tweens.add({ targets: this, x, y, duration: o.ms, ease, onComplete: () => resolve() })
+    })
+    if (this.gait === "flier") {
+      // Скольжение с наклоном вперёд
+      this.rig.setY(base)
+      scene.tweens.add({
+        targets: this.rig,
+        angle: 10 * this.facing,
+        duration: o.ms * 0.5,
+        yoyo: true,
+        ease: "Sine.easeInOut"
+      })
+      return move.then(() => {
+        o.onLand?.()
+        if (this.scene) this.syncShadow()
+      })
+    }
+    const arc = { t: 0 }
+    const rock = this.gait === "cavalry" ? 9 : this.gait === "armored" ? 3 : 6
+    const jump = new Promise<void>((resolve) => {
+      scene.tweens.add({
+        targets: arc,
+        t: 1,
+        duration: o.ms,
+        ease: "Linear",
+        onUpdate: () => {
+          if (!this.scene) return
+          const s = Math.sin(arc.t * Math.PI)
+          this.rig.y = base - s * this.size * hopH
+          // В воздухе тело вытягивается, у кавалерии раскачивается вперёд-назад (галоп)
+          this.rig.scaleY = 1 + s * 0.08
+          this.rig.scaleX = 1 - s * 0.05
+          this.rig.angle = Math.sin(arc.t * Math.PI * 2) * rock * this.facing * (this.gait === "cavalry" ? 1 : 0.5)
+          this.syncShadow()
+        },
+        onComplete: () => resolve()
+      })
+    })
+    return Promise.all([move, jump]).then(async () => {
+      if (!this.scene) return
+      this.rig.setY(base).setAngle(0)
+      this.syncShadow()
+      o.onLand?.()
+      // Приземление: сплющивание, у брони — сильнее
+      const sq = this.gait === "armored" ? 0.8 : 0.86
+      await tween(scene, {
+        targets: this.rig,
+        scaleX: 2 - sq,
+        scaleY: sq,
+        duration: Math.min(60, o.ms * 0.4),
+        ease: "Quad.easeOut"
+      })
+      if (!this.scene) return
+      scene.tweens.add({
+        targets: this.rig,
+        scaleX: 1,
+        scaleY: 1,
+        duration: o.last ? 160 : 60,
+        ease: o.last ? "Back.easeOut" : "Quad.easeOut"
+      })
+    })
   }
 
   /** Сменить позу (текстуру). Если текстура ещё не готова — подгрузить и применить, когда поза всё ещё актуальна. */
@@ -388,6 +778,11 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.blinkTimer = null
     this.hopTween?.stop()
     this.hopTween = null
+    this.setSelected(false)
+    for (const t of this.hitTweens) t.stop()
+    this.hitTweens = []
+    if (this.actedFx && this.sprite?.preFX) this.sprite.preFX.remove(this.actedFx as unknown as Phaser.FX.Controller)
+    this.actedFx = null
   }
 
   /** Подсветка «сюда нельзя» при перетаскивании. */
@@ -566,6 +961,13 @@ export class UnitView extends Phaser.GameObjects.Container {
     this.blinkBack = null
     this.hopTween?.stop()
     this.hopTween = null
+    this.sway?.stop()
+    this.bob?.stop()
+    this.flipTween?.stop()
+    for (const t of this.selTweens) t.stop()
+    for (const t of this.hitTweens) t.stop()
+    this.sway = null
+    this.bob = null
     super.destroy(fromScene)
   }
 

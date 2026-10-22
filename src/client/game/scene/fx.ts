@@ -1,6 +1,7 @@
 import Phaser from "phaser"
 import { TEX } from "./textures"
-import { BLOOD_COLORS, FONT, textStyle } from "./style"
+import { FONT, textStyle } from "./style"
+import { goreBurst, goreDecal } from "./gore"
 
 /** Сцена пригодна для твинов/таймеров: создаётся или работает. */
 export function sceneAlive(scene: Phaser.Scene): boolean {
@@ -66,7 +67,7 @@ export function floatText(
   })
 }
 
-/** Брызги крови. angle — направление разлёта в градусах (Phaser: 0 вправо, 90 вниз). */
+/** Брызги крови. angle — направление разлёта в градусах (Phaser: 0 вправо, 90 вниз). Рисует `gore.ts`. */
 export function bloodBurst(
   scene: Phaser.Scene,
   x: number,
@@ -76,21 +77,7 @@ export function bloodBurst(
   scale = 1,
   speedMul = 1
 ): void {
-  if (!sceneAlive(scene)) return
-  const emitter = scene.add.particles(x, y, TEX.dot, {
-    speed: { min: 80 * scale, max: 240 * scale },
-    angle: angle ?? { min: 0, max: 360 },
-    scale: { start: 0.9 * scale, end: 0.1 },
-    alpha: { start: 1, end: 0.6 },
-    lifespan: { min: 300, max: 650 },
-    gravityY: 500,
-    tint: BLOOD_COLORS,
-    emitting: false,
-    quantity: count
-  })
-  emitter.setDepth(24)
-  emitter.explode(count)
-  scene.time.delayedCall(800 / speedMul + 100, () => emitter.destroy())
+  goreBurst(scene, x, y, count, angle, scale, speedMul)
 }
 
 /** Облачко пыли при приземлении (шлепок на клетку). Не блокирует. */
@@ -112,23 +99,17 @@ export function dustPuff(scene: Phaser.Scene, x: number, y: number, size: number
   scene.time.delayedCall(700, () => emitter.destroy())
 }
 
-/** Кровавый декаль на земле. */
+/** Кровавый декаль на земле: клякса или растекающаяся лужа (`gore.ts`). animate = false — сразу итоговый вид. */
 export function bloodDecal(
   scene: Phaser.Scene,
   x: number,
   y: number,
   size: number,
   kind: "splat" | "pool",
-  seed = 0
+  seed = 0,
+  animate = true
 ): Phaser.GameObjects.Image {
-  const key = kind === "pool" ? TEX.pool : TEX.splat
-  const img = scene.add.image(x, y, key).setTint(BLOOD_COLORS[seed % BLOOD_COLORS.length] ?? 0xd9122b)
-  const s = kind === "pool" ? size * 0.95 : size * 0.5
-  img.setDisplaySize(s, kind === "pool" ? s * 0.75 : s)
-  img.setRotation(((seed * 37) % 360) * (Math.PI / 180))
-  img.setAlpha(kind === "pool" ? 0.85 : 0.7)
-  img.setDepth(1)
-  return img
+  return goreDecal(scene, x, y, size, kind, seed, animate)
 }
 
 /** Милый призрак улетает вверх. */
@@ -240,11 +221,46 @@ export async function banner(
       .setAngle(-18)
     scene.tweens.add({ targets: slash, x: w * 2, duration: (220 + hold * 0.5) / speed, ease: "Cubic.easeOut" })
   }
+  // Скоростные полосы внутри плашки: тянутся вслед за въездом
+  const streaks: Phaser.GameObjects.Rectangle[] = []
+  for (let i = 0; i < 9; i++) {
+    const sy = cy - bandH * 0.42 + (i / 8) * bandH * 0.84
+    const len = w * (0.15 + ((i * 37) % 10) / 25)
+    const r = scene.add.rectangle(-len, sy, len, 1 + (i % 3), i % 4 === 0 ? color : 0xffffff, 0.25 + (i % 3) * 0.12)
+    r.setDepth(30.5).setOrigin(0, 0.5)
+    streaks.push(r)
+    scene.tweens.add({
+      targets: r,
+      x: w + len,
+      duration: (260 + (i % 4) * 70) / speed,
+      delay: ((i % 5) * 25) / speed,
+      ease: "Cubic.easeOut",
+      onComplete: () => r.destroy()
+    })
+  }
   await Promise.all([
     tween(scene, { targets: band, x: -skew, duration: 200 / speed, ease: "Cubic.easeOut" }),
     tween(scene, { targets: [label, shadow], x: w / 2, duration: 200 / speed, ease: "Cubic.easeOut" })
   ])
-  if (sceneAlive(scene)) shadow.setX(w / 2 + 3)
+  if (sceneAlive(scene)) {
+    shadow.setX(w / 2 + 3)
+    // Удар надписи: перебор масштаба и короткая вспышка-кромка
+    scene.tweens.add({
+      targets: [label, shadow],
+      scale: { from: 1.25, to: 1 },
+      duration: 180 / speed,
+      ease: "Back.easeOut"
+    })
+    const edge = scene.add.rectangle(w / 2, cy, w * 1.2, bandH, 0xffffff, 0.35).setDepth(30.6)
+    scene.tweens.add({
+      targets: edge,
+      fillAlpha: 0,
+      scaleY: 1.4,
+      duration: 220 / speed,
+      onComplete: () => edge.destroy()
+    })
+    scene.cameras.main.shake(90 / speed, 3 / Math.max(1, w))
+  }
   if (opts.blood) {
     for (let i = 0; i < 4; i++) {
       bloodBurst(scene, w * (0.15 + i * 0.23), cy + bandH * 0.45, 8, { min: 40, max: 140 }, 0.6, speed)
@@ -259,6 +275,7 @@ export async function banner(
   label.destroy()
   shadow.destroy()
   slash?.destroy()
+  for (const r of streaks) if (r.scene) r.destroy()
 }
 
 export async function stamp(

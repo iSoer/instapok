@@ -5,12 +5,36 @@ import { $battleUi, type Presenter } from "@game/state/battleUi"
 import { haptic } from "@game/platform/haptics"
 import { MAP_SCENE_KEY, MapScene } from "./MapScene"
 import { CINEMATIC_SCENE_KEY, type CinematicData, type CombatEvent } from "./CinematicScene"
-import { banner, bloodBurst, floatText, ghostRise, healSparkles, starBurst, statusRing, stamp, tween, wait } from "./fx"
+import { banner, floatText, ghostRise, stamp, tween, wait } from "./fx"
 import { specialDef } from "@game/content/skills/specials"
 import { unitClass } from "@game/content/classes"
 import type { CritterPart } from "@game/art/index"
 import { deathSeed, pickDeathVariant, playDeathMap, preloadDeathParts, type DeathCtx } from "./deathFx"
 import { playQuickAttackFx, shakePx, weaponKindOf, weaponKindOfUnit } from "./attackFx"
+import { WEAPON_COLOR_HEX } from "./style"
+import { weaponDef } from "@game/content/weapons"
+import { hitGore, bloodTrail, screenBloodSplat } from "./gore"
+import { unitTexKey } from "./svgTextures"
+import {
+  afterImages,
+  bigNumber,
+  buffRunes,
+  danceFx,
+  doubleStrikeMark,
+  goreKindOfUnit,
+  healPillar,
+  hitStop,
+  levelUpFx,
+  portalSpawn,
+  shakeCam,
+  shockRing,
+  slashTrail,
+  sparks,
+  specialCutIn,
+  stepFx,
+  thrustLine
+} from "./motionFx"
+import type { UnitView } from "./UnitView"
 
 /** Проигрывает события боя на сцене карты (и в кинематике). Логики игры не содержит. */
 export class GamePresenter implements Presenter {
@@ -79,7 +103,7 @@ export class GamePresenter implements Presenter {
     const sp = this.speed()
     switch (ev.type) {
       case "moved":
-        return this.moved(ev.unitId, ev.path, map, sp)
+        return this.moved(ev.unitId, ev.path, before, map, sp)
       case "combat":
         // Кто-то погибнет — заранее растеризуем части тела для анимации гибели (с потолком 600 мс).
         this.lastCombat = ev
@@ -146,27 +170,29 @@ export class GamePresenter implements Presenter {
           }
         )
       case "reinforcements": {
-        await banner(map, "Подкрепление!", 0xe63946, sp, 300)
-        for (const id of ev.unitIds) {
+        await banner(map, "Подкрепление!", 0xe63946, sp, 300, { slash: true, blood: true })
+        // Каждый боец выходит из портала: вихрь, дым, вспышка, затем «вырастает» с пружиной
+        const spawns = ev.unitIds.map(async (id, i) => {
+          const bu = after.units[id]
+          if (!bu) return
+          await wait(map, (i * 110) / sp)
+          const c = map.center(bu.pos)
+          await portalSpawn(map, c.x, c.y, map.tile, sp)
           const view = map.ensureUnitView(id, after)
-          if (!view) continue
-          view.setScale(0)
-          this.tweenNoWait(map, { targets: view, scale: 1, duration: 260 / sp, ease: "Back.easeOut" })
-        }
-        return wait(map, 300 / sp)
+          if (!view) return
+          view.setScale(0.2).setAlpha(0)
+          this.tweenNoWait(map, { targets: view, scale: 1, alpha: 1, duration: 280 / sp, ease: "Back.easeOut" })
+        })
+        await Promise.all(spawns)
+        return wait(map, 260 / sp)
       }
       case "levelUp": {
         const view = map.units.get(ev.unitId)
         if (view) {
-          starBurst(map, view.x, view.y - map.tile * 0.1, map.tile, 8, sp)
-          floatText(map, view.x, view.y - map.tile * 0.6, "LV UP!", "#ffd166", sp, {
-            size: map.tile * 0.34,
-            rise: 30,
-            duration: 800
-          })
           view.hop()
           haptic("success")
-          return wait(map, 350 / sp)
+          await levelUpFx(map, view.x, view.y - map.tile * 0.1, map.tile, sp)
+          return wait(map, 200 / sp)
         }
         return
       }
@@ -176,6 +202,11 @@ export class GamePresenter implements Presenter {
         return wait(map, 60 / sp)
       case "battleEnded": {
         haptic(ev.result === "victory" ? "success" : ev.result === "defeat" ? "error" : "warning")
+        // Победа: выжившие подпрыгивают от радости; поражение — кровь на экране
+        if (ev.result === "victory") {
+          for (const v of map.units.values()) if (v.side === "player") v.hop()
+        }
+        else if (ev.result === "defeat") screenBloodSplat(map, 1, sp)
         return map.showEnd(ev.result, sp)
       }
     }
@@ -185,7 +216,7 @@ export class GamePresenter implements Presenter {
     if (scene.sys.isActive()) scene.tweens.add(cfg)
   }
 
-  private async moved(unitId: string, path: Pos[], map: MapScene, sp: number): Promise<void> {
+  private async moved(unitId: string, path: Pos[], state: BattleState, map: MapScene, sp: number): Promise<void> {
     const view = map.units.get(unitId)
     if (!view || path.length < 2) return
     view.setAlpha(1)
@@ -200,6 +231,9 @@ export class GamePresenter implements Presenter {
         return wait(map, 40 / sp)
       }
     }
+    // Время на клетку по походке: кавалерия быстрее, броня тяжелее
+    const perTile = view.gait === "cavalry" ? 105 : view.gait === "armored" ? 170 : view.gait === "flier" ? 120 : 135
+    const heavyStep = view.gait === "armored" || view.gait === "cavalry"
     view.setRunning(true)
     for (let i = 1; i < path.length; i++) {
       const p = path[i]
@@ -208,7 +242,20 @@ export class GamePresenter implements Presenter {
       if (prev && p.x !== prev.x) view.setFacing(p.x > prev.x ? 1 : -1)
       const c = map.center(p)
       view.setDepth(10 + p.y * 0.01)
-      await tween(map, { targets: view, x: c.x, y: c.y, duration: 120 / sp, ease: "Linear" })
+      const terrain = state.map.tiles[p.y]?.[p.x]
+      await view.stepTo(c.x, c.y, {
+        ms: perTile / sp,
+        first: i === 1,
+        last: i === path.length - 1,
+        onLand: () => {
+          if (!map.sys.isActive()) return
+          const feet = view.feetWorld()
+          if (view.gait !== "flier") stepFx(map, feet.x, feet.y, map.tile, terrain, state.map.biomeId, heavyStep)
+          if (view.gait === "armored") shakeCam(map, 50 / sp, 1.5)
+          // Раненый оставляет кровавый след
+          if (view.hpFrac() < 0.5) bloodTrail(map, feet.x, feet.y, map.tile, sp, 2)
+        }
+      })
     }
     view.setRunning(false)
   }
@@ -264,73 +311,155 @@ export class GamePresenter implements Presenter {
     // Быстрый режим на карте
     const aMax = before.units[ev.attackerId]?.maxHp ?? 1
     const dMax = before.units[ev.defenderId]?.maxHp ?? 1
+    let prevAttacker = ""
     for (const strike of ev.strikes) {
       const atk = strike.attackerId === ev.attackerId ? aView : dView
       const def = strike.attackerId === ev.attackerId ? dView : aView
       const defMax = strike.attackerId === ev.attackerId ? dMax : aMax
-      const ox = atk.x
-      const oy = atk.y
-      const dx = def.x - ox
-      const dy = def.y - oy
-      const len = Math.hypot(dx, dy) || 1
-      if (strike.special) {
-        floatText(map, atk.x, atk.y - map.tile * 0.7, specialDef(strike.special).name, "#ffd166", sp, {
-          size: map.tile * 0.26,
-          rise: 20
-        })
-        haptic("heavy")
-      }
-      else haptic("medium")
-      atk.setPose("run")
-      await tween(map, {
-        targets: atk,
-        x: ox + (dx / len) * map.tile * 0.35,
-        y: oy + (dy / len) * map.tile * 0.35,
-        duration: 100 / sp,
-        ease: "Quad.easeIn"
-      })
-      // Фирменный эффект оружия у клетки цели (облегчённый) + зум-удар; контакт — по его сигналу.
-      const quickFx = playQuickAttackFx({
-        scene: map,
-        kind: weaponKindOf(before, strike.attackerId),
-        attacker: atk,
-        defender: def,
-        atkPos: { x: atk.x, y: atk.y - map.tile * 0.1 },
-        defPos: { x: def.x, y: def.y - map.tile * 0.1 },
-        home: { x: ox, y: oy },
-        dir: dx >= 0 ? 1 : -1,
-        speed: sp,
-        special: !!strike.special,
-        effective: strike.effective,
-        damage: strike.damage,
-        size: map.tile,
-        color: 0xffffff
-      })
-      await quickFx.impactAt
-      def.hitFlash(160 / sp)
-      map.cameras.main.shake(90 / sp, (shakePx(!!strike.special, strike.effective) * 0.75) / map.scale.width)
-      const color
-        = strike.damage === 0 ? "#bbbbbb" : strike.special ? "#ffd166" : strike.effective ? "#ff6b6b" : "#ffffff"
-      floatText(map, def.x, def.y - map.tile * 0.5, strike.damage === 0 ? "Хлоп!" : String(strike.damage), color, sp, {
-        size: map.tile * (strike.special ? 0.4 : 0.34)
-      })
-      if (strike.damage > 0) {
-        const ang = (Math.atan2(dy, dx) * 180) / Math.PI
-        bloodBurst(map, def.x, def.y, 10, { min: ang - 40, max: ang + 40 }, 0.7, sp)
-        if (strike.defenderId === ev.defenderId) map.addDecal(ev.defenderPos, "splat", this.seedCounter++)
-        else map.addDecal(ev.attackerPos, "splat", this.seedCounter++)
-      }
-      if (strike.healed > 0)
-        floatText(map, atk.x, atk.y - map.tile * 0.5, `+${strike.healed}`, "#80ed99", sp, { size: map.tile * 0.3 })
-      if (strike.miracle)
-        floatText(map, def.x, def.y - map.tile * 0.8, "1 HP!", "#ffd700", sp, { size: map.tile * 0.3 })
+      const atkUnit = before.roster[strike.attackerId]
+      if (!map.sys.isActive() || !atk.scene || !def.scene) return
+      await this.quickStrike(strike, atk, def, defMax, atkUnit, before, map, sp, prevAttacker === strike.attackerId)
+      prevAttacker = strike.attackerId
+      if (strike.defenderId === ev.defenderId) map.addDecal(ev.defenderPos, "splat", this.seedCounter++)
+      else if (strike.damage > 0) map.addDecal(ev.attackerPos, "splat", this.seedCounter++)
       def.setHp(strike.defenderHpAfter, defMax)
       atk.setHp(strike.attackerHpAfter, strike.attackerId === ev.attackerId ? aMax : dMax)
-      await tween(map, { targets: atk, x: ox, y: oy, duration: 100 / sp, ease: "Quad.easeOut" })
-      atk.setPose("idle")
-      await quickFx.done
       await wait(map, 90 / sp)
     }
+  }
+
+  /**
+   * Один удар на карте: замах назад, рывок с остаточными образами, след оружия и эффект по виду оружия,
+   * хит-стоп и отдача, кровь (API gore), крупная цифра урона, возврат с пружиной.
+   */
+  private async quickStrike(
+    strike: CombatEvent["strikes"][number],
+    atk: UnitView,
+    def: UnitView,
+    defMax: number,
+    atkUnit: BattleState["roster"][string] | undefined,
+    before: BattleState,
+    map: MapScene,
+    sp: number,
+    second: boolean
+  ): Promise<void> {
+    const tile = map.tile
+    const ox = atk.x
+    const oy = atk.y
+    const dx = def.x - ox
+    const dy = def.y - oy
+    const len = Math.hypot(dx, dy) || 1
+    const ux = dx / len
+    const uy = dy / len
+    const skill = atkUnit ? weaponDef(atkUnit.skills.weapon).kind : "sword"
+    const color = atkUnit ? WEAPON_COLOR_HEX[weaponDef(atkUnit.skills.weapon).color] : 0xffffff
+    const trailColor = color === WEAPON_COLOR_HEX.colorless ? 0xfff3b0 : color
+    if (second) doubleStrikeMark(map, atk.x, atk.y - tile * 0.75, tile, sp)
+    if (strike.special) {
+      haptic("heavy")
+      const portrait = atkUnit ? unitTexKey(atkUnit, "happy", "map") : undefined
+      await specialCutIn(map, specialDef(strike.special).name, trailColor, atk.side === "player", sp, portrait)
+      if (!atk.scene || !def.scene) return
+    }
+    else haptic("medium")
+    // Замах (anticipation): назад и присесть
+    atk.setPose("run")
+    const rig = atk.bodyRig()
+    await Promise.all([
+      tween(map, {
+        targets: atk,
+        x: ox - ux * tile * 0.12,
+        y: oy - uy * tile * 0.12,
+        duration: 110 / sp,
+        ease: "Quad.easeOut"
+      }),
+      tween(map, { targets: rig, scaleX: 1.12, scaleY: 0.88, duration: 110 / sp, ease: "Quad.easeOut" })
+    ])
+    if (!atk.scene) return
+    // Рывок с остаточными образами
+    const reach = def.side === atk.side ? 0.2 : 0.38
+    afterImages(map, atk, 3, 28, trailColor, sp)
+    map.tweens.add({ targets: rig, scaleX: 0.92, scaleY: 1.1, duration: 90 / sp, ease: "Quad.easeIn" })
+    await tween(map, {
+      targets: atk,
+      x: ox + ux * tile * reach,
+      y: oy + uy * tile * reach,
+      duration: 90 / sp,
+      ease: "Quad.easeIn"
+    })
+    if (!atk.scene || !def.scene) return
+    const hitPos = { x: def.x, y: def.y - tile * 0.1 }
+    // След оружия поверх фирменного эффекта
+    if (skill === "sword" || skill === "axe")
+      slashTrail(map, hitPos.x, hitPos.y, tile, ux >= 0 ? 1 : -1, trailColor, sp, !!strike.special)
+    else if (skill === "spear") thrustLine(map, { x: atk.x, y: atk.y - tile * 0.1 }, hitPos, tile, trailColor, sp)
+    const quickFx = playQuickAttackFx({
+      scene: map,
+      kind: weaponKindOf(before, strike.attackerId),
+      attacker: atk,
+      defender: def,
+      atkPos: { x: atk.x, y: atk.y - tile * 0.1 },
+      defPos: hitPos,
+      home: { x: ox, y: oy },
+      dir: dx >= 0 ? 1 : -1,
+      speed: sp,
+      special: !!strike.special,
+      effective: strike.effective,
+      damage: strike.damage,
+      size: tile,
+      color
+    })
+    await quickFx.impactAt
+    if (!def.scene || !atk.scene) return
+    if (skill === "gauntlet") shockRing(map, hitPos.x, hitPos.y, tile, sp)
+    // Контакт: хит-стоп, отдача, тряска
+    const frac = strike.damage / Math.max(1, defMax)
+    const lethal = strike.defenderHpAfter <= 0
+    hitStop(map, strike.damage > 0 ? (strike.special || lethal ? 110 : 75) : 45)
+    def.takeHit(ux, uy, frac * 2.2 + (strike.special ? 0.5 : 0), sp)
+    shakeCam(map, 110 / sp, shakePx(!!strike.special, strike.effective) * (lethal ? 1.6 : 0.9))
+    if (strike.damage > 0) {
+      hitGore(map, {
+        x: hitPos.x,
+        y: hitPos.y,
+        size: tile,
+        dirX: ux,
+        dirY: uy,
+        damage: strike.damage,
+        maxHp: defMax,
+        lethal,
+        speed: sp,
+        depth: 24,
+        ground: { x: def.x, y: def.y + tile * 0.3 },
+        kind: goreKindOfUnit(atkUnit)
+      })
+      if (frac >= 0.4 || lethal) screenBloodSplat(map, Math.min(1, frac + (lethal ? 0.3 : 0)), sp)
+    }
+    else sparks(map, hitPos.x, hitPos.y, tile, sp)
+    const numColor
+      = strike.damage === 0 ? "#bbbbbb" : strike.special ? "#ffd166" : strike.effective ? "#ff6b6b" : "#ffffff"
+    bigNumber(
+      map,
+      def.x,
+      def.y - tile * 0.55,
+      strike.damage === 0 ? "Хлоп!" : String(strike.damage),
+      numColor,
+      tile * (strike.special || lethal ? 0.5 : 0.4),
+      sp,
+      { crit: !!strike.special || frac >= 0.5 }
+    )
+    if (strike.effective)
+      floatText(map, def.x + tile * 0.3, def.y - tile * 0.85, "×1.5", "#ff6b6b", sp, { size: tile * 0.22 })
+    if (strike.healed > 0) {
+      floatText(map, atk.x, atk.y - tile * 0.5, `+${strike.healed}`, "#80ed99", sp, { size: tile * 0.3 })
+      healPillar(map, ox, oy, tile, sp)
+    }
+    if (strike.miracle) floatText(map, def.x, def.y - tile * 0.8, "1 HP!", "#ffd700", sp, { size: tile * 0.3 })
+    // Отдача и возврат с пружиной
+    map.tweens.add({ targets: rig, scaleX: 1, scaleY: 1, duration: 160 / sp, ease: "Back.easeOut" })
+    await tween(map, { targets: atk, x: ox, y: oy, duration: 150 / sp, ease: "Back.easeOut" })
+    if (atk.scene) atk.setPose("idle")
+    await quickFx.done
   }
 
   private runCinematic(
@@ -445,34 +574,36 @@ export class GamePresenter implements Presenter {
     if (!view) return
     switch (ev.effect.type) {
       case "heal":
-        healSparkles(map, view.x, view.y, map.tile, sp)
+        healPillar(map, view.x, view.y, map.tile, sp)
         floatText(map, view.x, view.y - map.tile * 0.5, `+${ev.effect.amount}`, "#80ed99", sp, {
-          size: map.tile * 0.32
+          size: map.tile * 0.34
         })
         if (ev.hpAfter !== undefined)
           view.setHp(ev.hpAfter, view.getHp() > ev.hpAfter ? view.getHp() : Math.max(ev.hpAfter, view.getHp()))
         break
       case "damage":
-        floatText(map, view.x, view.y - map.tile * 0.5, `−${ev.effect.amount}`, "#ffffff", sp, {
-          size: map.tile * 0.32
+        bigNumber(map, view.x, view.y - map.tile * 0.5, `−${ev.effect.amount}`, "#ffffff", map.tile * 0.34, sp)
+        view.takeHit(0, -1, 0.6, sp)
+        hitGore(map, {
+          x: view.x,
+          y: view.y - map.tile * 0.1,
+          size: map.tile,
+          dirX: 0,
+          dirY: -1,
+          damage: ev.effect.amount,
+          maxHp: Math.max(ev.effect.amount, view.getHp() + ev.effect.amount),
+          lethal: (ev.hpAfter ?? 1) <= 0,
+          speed: sp,
+          depth: 24,
+          ground: { x: view.x, y: view.y + map.tile * 0.3 },
+          kind: "blunt"
         })
-        bloodBurst(map, view.x, view.y, 6, null, 0.5, sp)
         break
       case "buff":
-        statusRing(map, view.x, view.y + map.tile * 0.1, map.tile, "buff", sp)
-        floatText(map, view.x + map.tile * 0.25, view.y - map.tile * 0.4, "▲", "#80ed99", sp, {
-          size: map.tile * 0.3,
-          rise: 18,
-          duration: 400
-        })
+        buffRunes(map, view.x, view.y, map.tile, Object.keys(ev.effect.stats), true, sp)
         break
       case "debuff":
-        statusRing(map, view.x, view.y + map.tile * 0.1, map.tile, "debuff", sp)
-        floatText(map, view.x + map.tile * 0.25, view.y - map.tile * 0.4, "▼", "#c77dff", sp, {
-          size: map.tile * 0.3,
-          rise: 18,
-          duration: 400
-        })
+        buffRunes(map, view.x, view.y, map.tile, Object.keys(ev.effect.stats), false, sp)
         break
       case "flag":
         return
@@ -486,19 +617,38 @@ export class GamePresenter implements Presenter {
     map: MapScene,
     sp: number
   ): Promise<void> {
-    const moves = ev.moves.map((m) => {
+    // Перемещения (swap, shove, pivot…): по дуге с подскоком, с пылью на приземлении
+    const moves = ev.moves.map((m, i) => {
       const view = map.units.get(m.unitId)
       if (!view) return Promise.resolve()
       const c = map.center(m.to)
       view.setDepth(10 + m.to.y * 0.01)
-      return tween(map, { targets: view, x: c.x, y: c.y, duration: 180 / sp, ease: "Sine.easeInOut" })
+      const sx = view.x
+      const sy = view.y
+      const lift = map.tile * (0.35 + i * 0.12)
+      const st = { t: 0 }
+      return tween(map, {
+        targets: st,
+        t: 1,
+        duration: 260 / sp,
+        ease: "Sine.easeInOut",
+        onUpdate: () => {
+          if (!view.scene) return
+          view.setPosition(sx + (c.x - sx) * st.t, sy + (c.y - sy) * st.t - Math.sin(st.t * Math.PI) * lift)
+        }
+      }).then(() => {
+        if (!view.scene) return
+        view.setPosition(c.x, c.y)
+        const feet = view.feetWorld()
+        stepFx(map, feet.x, feet.y, map.tile, after.map.tiles[m.to.y]?.[m.to.x], after.map.biomeId, true)
+      })
     })
     await Promise.all(moves)
     const target = map.units.get(ev.targetId)
     const actor = map.units.get(ev.unitId)
     if (target && ev.heal > 0) {
-      healSparkles(map, target.x, target.y, map.tile, sp)
-      floatText(map, target.x, target.y - map.tile * 0.5, `+${ev.heal}`, "#80ed99", sp, { size: map.tile * 0.34 })
+      healPillar(map, target.x, target.y, map.tile, sp)
+      bigNumber(map, target.x, target.y - map.tile * 0.55, `+${ev.heal}`, "#80ed99", map.tile * 0.4, sp)
       const tb = after.units[ev.targetId]
       if (ev.targetHpAfter !== undefined && tb) target.setHp(ev.targetHpAfter, tb.maxHp)
       haptic("light")
@@ -508,12 +658,16 @@ export class GamePresenter implements Presenter {
       if (ab) actor.setHp(ev.unitHpAfter, ab.maxHp)
     }
     if (target && ev.assistId === "as_dance") {
-      floatText(map, target.x, target.y - map.tile * 0.6, "↻ ещё раз!", "#ffd166", sp, { size: map.tile * 0.28 })
+      if (actor) danceFx(map, actor.x, actor.y, map.tile, sp, actor.bodyRig())
+      danceFx(map, target.x, target.y, map.tile, sp, target.bodyRig())
+      floatText(map, target.x, target.y - map.tile * 0.7, "↻ ещё раз!", "#ffd166", sp, { size: map.tile * 0.3 })
       target.setActed(false)
+      target.hop()
     }
     if (target && ev.assistId.startsWith("as_rally")) {
-      statusRing(map, target.x, target.y + map.tile * 0.1, map.tile, "buff", sp)
-      floatText(map, target.x, target.y - map.tile * 0.6, "▲", "#80ed99", sp, { size: map.tile * 0.34, rise: 20 })
+      const stat = ev.assistId.replace("as_rally_", "")
+      buffRunes(map, target.x, target.y, map.tile, [stat], true, sp)
+      actor?.hop()
     }
     return wait(map, 200 / sp)
   }
