@@ -134,6 +134,8 @@ export class GamePresenter implements Presenter {
         return this.effect(ev, map, sp)
       case "assist":
         return this.assist(ev, after, map, sp)
+      case "item":
+        return this.item(ev, after, map, sp)
       case "wallHit": {
         map.shakeTile(ev.pos)
         map.setWallHp(ev.pos, ev.hpAfter, sp)
@@ -609,6 +611,25 @@ export class GamePresenter implements Presenter {
         return
     }
     return wait(map, 90 / sp)
+  }
+
+  /** Предмет из рюкзака: столб света и цифры лечения на каждом, кого он задел; снятые штрафы — руны. */
+  private async item(ev: Extract<BattleEvent, { type: "item" }>, after: BattleState, map: MapScene, sp: number): Promise<void> {
+    map.units.get(ev.unitId)?.hop()
+    for (const h of ev.heals) {
+      const view = map.units.get(h.unitId)
+      const bu = after.units[h.unitId]
+      if (!view) continue
+      healPillar(map, view.x, view.y, map.tile, sp)
+      bigNumber(map, view.x, view.y - map.tile * 0.55, `+${h.amount}`, "#80ed99", map.tile * 0.4, sp)
+      if (bu) view.setHp(h.hpAfter, bu.maxHp)
+    }
+    for (const id of ev.cleansed) {
+      const view = map.units.get(id)
+      if (view) floatText(map, view.x, view.y - map.tile * 0.75, "штрафы сняты", "#8fc9ff", sp, { size: map.tile * 0.26 })
+    }
+    if (ev.heals.length > 0) haptic("light")
+    return wait(map, 260 / sp)
   }
 
   private async assist(

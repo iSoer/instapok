@@ -3,7 +3,9 @@ import { useStore } from "@nanostores/react"
 import type { Difficulty, Stance, UnitInstance } from "@game/core/types"
 import { SQUAD_SIZE } from "@game/core/types"
 import { visibleStats } from "@game/core/units"
-import { DIFFICULTIES } from "@game/content/balance"
+import { DIFFICULTIES, ITEMS } from "@game/content/balance"
+import { CONSUMABLES } from "@game/content/items"
+import { itemCount, totalCount } from "@game/core/items"
 import { biomeDef } from "@game/content/biomes"
 import {
   $save,
@@ -11,6 +13,7 @@ import {
   difficultyUnlocked,
   ensureRoster,
   scoutBattle,
+  setPackAction,
   startBattle,
   toggleSquad
 } from "@game/state/save"
@@ -74,6 +77,16 @@ export function BattleSetupScreen() {
     if (!r.ok) return toast(r.error ?? "Ошибка", true)
     haptic("select")
   }
+  const pack = pending?.pack ?? {}
+  const packed = totalCount(pack)
+  const owned = CONSUMABLES.filter(c => itemCount(save.inventory, c.id) > 0)
+  const onPack = (id: string, delta: number) => {
+    const n = Math.max(0, (pack[id] ?? 0) + delta)
+    const r = setPackAction({ ...pack, [id]: n })
+    if (!r.ok) return toast(r.error ?? "Ошибка", true)
+    haptic("select")
+  }
+
   const onStart = () => {
     if (squad.length === 0) return toast("Выберите бойцов в отряд", true)
     const r = startBattle(squadIds)
@@ -84,7 +97,7 @@ export function BattleSetupScreen() {
 
   return (
     <div className="screen">
-      <TopBar title="Подготовка к бою" right={<ResourceBar />} onBack={() => navigate("/", true)} />
+      <TopBar title="Вылазка" right={<ResourceBar />} onBack={() => navigate("/village", true)} />
       <div className="screen-body">
         <div className="section-title">Сложность</div>
         <div className="stack">
@@ -196,6 +209,32 @@ export function BattleSetupScreen() {
           })}
         </div>
 
+        <div className="section-title">{`Рюкзак ${packed}/${ITEMS.packSize}`}</div>
+        {owned.length === 0
+          ? <p className="muted small">Расходников нет — пластыри и аптечки продаёт Тётушка Сырница в Лавке.</p>
+          : (
+              <div className="stack">
+                {owned.map(c => (
+                  <div key={c.id} className="card pack-row">
+                    <span className="store-ico" aria-hidden="true">{c.icon}</span>
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <b>{c.name}</b>
+                      <div className="muted small">{`${c.desc} В инвентаре: ${itemCount(save.inventory, c.id)}`}</div>
+                    </div>
+                    <Button sm ghost disabled={!pack[c.id]} onClick={() => onPack(c.id, -1)}>−</Button>
+                    <b className="pack-count">{pack[c.id] ?? 0}</b>
+                    <Button
+                      sm
+                      disabled={packed >= ITEMS.packSize || (pack[c.id] ?? 0) >= itemCount(save.inventory, c.id)}
+                      onClick={() => onPack(c.id, 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
         <div className="card power-card">
           <div className="row between">
             <span>Сила отряда</span>
@@ -208,7 +247,7 @@ export function BattleSetupScreen() {
             <div className={barClass} style={{ width: `${Math.min(100, ratio * 50)}%` }} />
           </div>
         </div>
-        <div className="warning-box">☠️ Павшие в бою не возвращаются</div>
+        <div className="warning-box">☠️ Павшие в бою не возвращаются вместе со снаряжением. Поражение — половина добычи.</div>
         <Button big primary block pulse={squad.length > 0} icon="⚔️" onClick={onStart} disabled={squad.length === 0 || !map}>
           Начать бой
         </Button>

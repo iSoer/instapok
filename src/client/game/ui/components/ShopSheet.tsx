@@ -10,7 +10,7 @@ import { Button } from "./Button"
 import { UnitRow } from "./UnitRow"
 import { UnitDetails } from "./UnitDetails"
 
-/** Магазин: витрина персонажей за Вкусняшки. Цена зависит от уровня и редкости, витрина обновляется после боя. */
+/** Набор в Казарме: витрина персонажей за Вкусняшки. Цена зависит от уровня и редкости, витрина обновляется после боя. */
 export function ShopSheet({
   open,
   onClose,
@@ -36,7 +36,7 @@ export function ShopSheet({
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="🛒 Магазин">
+    <BottomSheet open={open} onClose={onClose} title="🐾 Набор">
       <p className="muted small hire-sub">
         У вас 🦴
         {" "}

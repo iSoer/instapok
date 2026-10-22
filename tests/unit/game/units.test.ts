@@ -48,7 +48,8 @@ describe("generateUnit", () => {
         expect(vs.hp).toBeGreaterThan(0)
         for (const s of STATS) expect(vs[s]).toBeGreaterThanOrEqual(0)
         expect(u.learnable.length).toBeGreaterThan(0)
-        expect(u.skills.weapon).toBe(`${u.weaponSkill}_basic`)
+        // Каждый новый боец начинает с простым деревянным оружием своего навыка
+        expect(u.skills.weapon).toBe(`${u.weaponSkill}_wood`)
         if (u.weaponSkill === "whiteMagic") expect(u.skills.assist).toBe("as_heal")
         if (u.classId === DANCER_CLASS) expect(u.skills.assist).toBe("as_dance")
       }),
@@ -127,18 +128,16 @@ describe("generateRoster", () => {
 })
 
 describe("классы FW", () => {
-  it("смена класса: только открытый, оружие из класса, Бинт получает лечение", () => {
+  it("смена класса: только открытый, оружие остаётся в лапах, Dancer получает танец", () => {
     const u = generateUnit({ seed: 99, level: 40 })
     for (const id of openClasses(u)) {
-      for (const w of classWeapons(id)) {
-        const next = reclassUnit(u, id, w)
-        expect(next.classId).toBe(id)
-        expect(next.weaponSkill).toBe(w)
-        expect(next.skills.weapon.startsWith(next.weaponSkill)).toBe(true)
-        if (next.weaponSkill === "whiteMagic") expect(next.skills.assist).toBe("as_heal")
-        if (next.classId === DANCER_CLASS) expect(next.skills.assist).toBe("as_dance")
-        else expect(next.skills.assist).not.toBe("as_dance")
-      }
+      const next = reclassUnit(u, id)
+      expect(next.classId).toBe(id)
+      expect(next.weaponSkill).toBe(u.weaponSkill)
+      expect(next.skills.weapon).toBe(u.skills.weapon)
+      if (next.weaponSkill === "whiteMagic") expect(next.skills.assist).toBe("as_heal")
+      if (next.classId === DANCER_CLASS) expect(next.skills.assist).toBe("as_dance")
+      else expect(next.skills.assist).not.toBe("as_dance")
     }
     const closed = CLASS_IDS.find(id => !openClasses(u).includes(id))
     if (closed) expect(() => reclassUnit(u, closed)).toThrow()

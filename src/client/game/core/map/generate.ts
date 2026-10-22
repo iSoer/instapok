@@ -17,6 +17,7 @@ import type {
 import { MAP_H, MAP_W, MAX_LEVEL, clamp, inBounds, posKey } from "../types"
 import { isPassable } from "./pathing"
 import { generateUnit, loadoutsAt, type Loadout } from "../units"
+import { enemyWeaponGrade } from "../items"
 import { BIOMES, biomeDef } from "@game/content/biomes"
 import { DIFFICULTIES, REWARDS, TERRAIN_SHARE, difficultyDef } from "@game/content/balance"
 import { DANCER_CLASS, unitClass } from "@game/content/classes"
@@ -195,6 +196,7 @@ function makeEnemy(
     species,
     classId: loadout.classId,
     weaponSkill: loadout.weaponSkill,
+    weaponGrade: enemyWeaponGrade(level),
     isEnemy: true,
     factionId,
     isBoss,

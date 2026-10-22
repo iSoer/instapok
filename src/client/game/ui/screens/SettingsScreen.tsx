@@ -77,7 +77,7 @@ export function SettingsScreen() {
 
   return (
     <div className="screen">
-      <TopBar title="Настройки" onBack={() => navigate("/", true)} />
+      <TopBar title="Настройки" />
       <div className="screen-body">
         <div className="card pop-in">
           <div className="section-title">🔊 Звук и отклик</div>

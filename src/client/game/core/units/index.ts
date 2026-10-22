@@ -12,7 +12,7 @@ import {
   fwClass,
   unitClass
 } from "@game/content/classes"
-import { basicWeaponId, isMagicWeapon, weaponDef, weaponsForSkill } from "@game/content/weapons"
+import { gradeWeaponId, isMagicWeapon, isWeaponId, weaponDef } from "@game/content/weapons"
 import { SPECIALS } from "@game/content/skills/specials"
 import { ASSISTS } from "@game/content/skills/assists"
 import { PASSIVES } from "@game/content/skills/passives"
@@ -27,7 +27,7 @@ import { generateCharacter, validateCharacterRequest } from "@/server/character-
 import { loadCharacterModel } from "@/server/character-model/model"
 import type { StatValues } from "@shared/character/leveling"
 import { CLASS_TIERS, availableClasses, canTakeClass, isUniqueClass, statsInClass } from "@shared/character/classes"
-import { rankAtLevel, rankIndex, ranksAtLevel, type Rank, type WeaponSkill } from "@shared/character/skills"
+import { rankAtLevel, rankIndex, ranksAtLevel, type Rank, type WeaponGrade, type WeaponSkill } from "@shared/character/skills"
 
 /* ---------- Статы: модель персонажа → бой ---------- */
 
@@ -77,8 +77,18 @@ export function rankMt(rank: Rank): number {
   return Math.floor(rankIndex(rank) * COMBAT.rankMt)
 }
 
+/** На сколько ступеней ранг навыка бойца ниже требуемого рангом его оружия (0 — владеет свободно). */
+export function weaponShortfall(unit: UnitInstance): number {
+  return Math.max(0, rankIndex(weaponDef(unit.skills.weapon).requiredRank) - rankIndex(weaponRank(unit)))
+}
+
+/** Mt оружия в лапах бойца: Mt оружия + заточка + ранг навыка − штраф за недостающий ранг. */
 export function weaponMt(unit: UnitInstance): number {
-  return weaponDef(unit.skills.weapon).mt + unit.weaponTier * COMBAT.weaponTierMt + rankMt(weaponRank(unit))
+  const w = weaponDef(unit.skills.weapon)
+  return Math.max(
+    0,
+    w.mt + unit.weaponTier * COMBAT.weaponTierMt + rankMt(weaponRank(unit)) - weaponShortfall(unit) * COMBAT.rankShortMt
+  )
 }
 
 /** Видимые статы вне боя: уровень и класс + Mt оружия + постоянные бонусы. */
@@ -175,20 +185,23 @@ function withClassAssist(unit: UnitInstance, prev: UnitInstance): UnitInstance {
 }
 
 /**
- * Сменить класс (как в FW — бесплатно, если класс открыт на уровне). Навык оружия — `weaponSkill`,
- * если класс им сражается, иначе прежний или лучший по рангу. Смена оружия сбрасывает экипированное на базовое.
+ * Сменить класс (как в FW — бесплатно, если класс открыт на уровне). Оружие — предмет, поэтому остаётся в лапах:
+ * класс меняет статы и передвижение, а навык боя по-прежнему задаёт оружие.
  */
-export function reclassUnit(unit: UnitInstance, classId: string, weaponSkill?: WeaponSkill): UnitInstance {
+export function reclassUnit(unit: UnitInstance, classId: string): UnitInstance {
   if (!canTakeClassNow(unit, classId)) throw new Error(`class ${classId} is not open at level ${unit.level}`)
-  const weapons = classWeapons(classId)
-  const skill
-    = weaponSkill && weapons.includes(weaponSkill)
-      ? weaponSkill
-      : weapons.includes(unit.weaponSkill)
-        ? unit.weaponSkill
-        : bestWeapon(classId, unit, best => best[0] as WeaponSkill)
-  const next: UnitInstance = { ...unit, classId, weaponSkill: skill }
-  if (skill !== unit.weaponSkill) next.skills = { ...unit.skills, weapon: basicWeaponId(skill) }
+  const next: UnitInstance = { ...unit, classId }
+  invalidateKit(unit)
+  return withClassAssist(next, unit)
+}
+
+/**
+ * Взять в лапы оружие (предмет инвентаря или деревянное): оружием может сражаться любой боец, навык боя становится
+ * навыком оружия, а ранг этого навыка решает, насколько хорошо боец им владеет (`weaponMt`).
+ */
+export function equipWeapon(unit: UnitInstance, weaponId: string): UnitInstance {
+  const w = weaponDef(weaponId)
+  const next: UnitInstance = { ...unit, weaponSkill: w.kind, skills: { ...unit.skills, weapon: weaponId } }
   invalidateKit(unit)
   return withClassAssist(next, unit)
 }
@@ -225,7 +238,6 @@ export function allowedSkillIds(cls: ClassDef, species: Species): string[] {
     if (!passiveAllowed(p, cls)) continue
     out.push(p.id)
   }
-  for (const w of weaponsForSkill(cls.weaponSkill)) if (w.variant !== "basic") out.push(w.id)
   return out
 }
 
@@ -254,7 +266,7 @@ export function skillCost(skillId: string): number {
   if (a) return a.spCost
   const p = PASSIVES.find(x => x.id === skillId)
   if (p) return p.spCost
-  return weaponDef(skillId).spCost
+  throw new Error(`unknown skill ${skillId}`)
 }
 
 /* ---------- Генерация ---------- */
@@ -273,6 +285,8 @@ export interface GenerateUnitOptions {
   classId?: string
   /** Желаемый навык оружия, если класс им сражается. */
   weaponSkill?: WeaponSkill
+  /** Грейд оружия в лапах: новые бойцы игрока — деревянное, враги — по уровню (`enemyWeaponGrade`). */
+  weaponGrade?: WeaponGrade
   isEnemy?: boolean
   factionId?: string
   isBoss?: boolean
@@ -344,7 +358,7 @@ export function generateUnit(opts: GenerateUnitOptions): UnitInstance {
   const cls = unitClass({ classId, weaponSkill })
 
   // Навыки
-  const skills: UnitSkills = { weapon: basicWeaponId(weaponSkill) }
+  const skills: UnitSkills = { weapon: gradeWeaponId(weaponSkill, opts.weaponGrade ?? "wood") }
   const learned: string[] = []
   const allowed = allowedSkillIds(cls, species)
   const specials = allowed.filter(id => SPECIALS.some(s => s.id === id))
@@ -568,6 +582,7 @@ export function withSkills(unit: UnitInstance, patch: Partial<UnitSkills>): Unit
 }
 
 export function learnSkill(unit: UnitInstance, skillId: string): UnitInstance {
+  if (isWeaponId(skillId)) throw new Error("weapon is an item, not a skill")
   if (unit.learned.includes(skillId)) return unit
   const cost = skillCost(skillId)
   if (unit.sp < cost) throw new Error("not enough SP")
@@ -582,11 +597,8 @@ export function learnSkill(unit: UnitInstance, skillId: string): UnitInstance {
 }
 
 export function equipSkill(unit: UnitInstance, skillId: string | undefined, slot: keyof UnitSkills): UnitInstance {
-  if (slot === "weapon" && !skillId) throw new Error("weapon required")
-  if (skillId && slot === "weapon" && weaponDef(skillId).kind !== unit.weaponSkill)
-    throw new Error("weapon of another skill")
-  if (skillId && !unit.learned.includes(skillId) && !(slot === "weapon" && skillId === basicWeaponId(unit.weaponSkill)))
-    throw new Error("skill not learned")
+  if (slot === "weapon") throw new Error("weapon is an item: use equipWeapon")
+  if (skillId && !unit.learned.includes(skillId)) throw new Error("skill not learned")
   const skills = { ...unit.skills }
   if (skillId) skills[slot] = skillId as string
   else delete skills[slot]

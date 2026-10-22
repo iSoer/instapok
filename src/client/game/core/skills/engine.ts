@@ -1,4 +1,4 @@
-import type { AssistDef, ClassDef, PassiveDef, SkillHooks, SpecialDef, TraitDef, WeaponDef } from "./types"
+import type { AssistDef, ClassDef, PassiveDef, SkillHooks, SpecialDef, TalismanDef, TraitDef, WeaponDef } from "./types"
 import type { Stats, UnitInstance } from "../types"
 import { addStats, emptyStats } from "../types"
 import { unitClass } from "@game/content/classes"
@@ -7,6 +7,7 @@ import { passiveDef } from "@game/content/skills/passives"
 import { specialDef } from "@game/content/skills/specials"
 import { assistDef } from "@game/content/skills/assists"
 import { traitDef } from "@game/content/traits"
+import { talismanDef } from "@game/content/items"
 import { MOVE_RANGE } from "@game/content/classes"
 
 export interface UnitKit {
@@ -14,6 +15,7 @@ export interface UnitKit {
   weapon: WeaponDef
   passives: PassiveDef[]
   trait?: TraitDef
+  talisman?: TalismanDef
   special?: SpecialDef
   assist?: AssistDef
   hooks: SkillHooks[]
@@ -35,14 +37,16 @@ export function unitKit(unit: UnitInstance): UnitKit {
   const trait = unit.traitId ? traitDef(unit.traitId) : undefined
   const special = unit.skills.special ? specialDef(unit.skills.special) : undefined
   const assist = unit.skills.assist ? assistDef(unit.skills.assist) : undefined
+  const talisman = unit.accessory ? talismanDef(unit.accessory) : undefined
   const hooks: SkillHooks[] = passives.map(p => p.hooks)
   if (trait) hooks.push(trait.hooks)
-  const kit: UnitKit = { cls, weapon, passives, trait, special, assist, hooks }
+  if (talisman) hooks.push(talisman.hooks)
+  const kit: UnitKit = { cls, weapon, passives, trait, talisman, special, assist, hooks }
   kitCache.set(unit, kit)
   return kit
 }
 
-/** Постоянные бонусы к статам от навыков, черты и оружия (без Mt). */
+/** Постоянные бонусы к статам от навыков, черты, талисмана и оружия (без Mt). */
 export function permanentBonus(unit: UnitInstance): Stats {
   const kit = unitKit(unit)
   let s = emptyStats()
@@ -87,6 +91,10 @@ export function xpMultiplier(unit: UnitInstance): number {
   let m = 1
   for (const h of unitKit(unit).hooks) if (h.xpMultiplier) m *= h.xpMultiplier
   return m
+}
+
+export function negatesEffective(unit: UnitInstance): boolean {
+  return unitKit(unit).hooks.some(h => h.negateEffective)
 }
 
 export function treatsMultiplier(unit: UnitInstance): number {

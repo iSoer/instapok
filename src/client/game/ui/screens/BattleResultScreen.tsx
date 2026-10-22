@@ -5,7 +5,7 @@ import type { Stats } from "@game/core/types"
 import { displayName, unitClassName } from "@game/core/units"
 import { biomeDef } from "@game/content/biomes"
 import { XP } from "@game/content/balance"
-import { $save, ensureRoster } from "@game/state/save"
+import { $save } from "@game/state/save"
 import { navigate } from "@game/state/router"
 import { Button } from "../components/Button"
 import { UnitAvatar } from "../components/UnitAvatar"
@@ -163,19 +163,8 @@ export function BattleResultScreen() {
           <div className="card warning-box stack pop-in" style={{ animationDelay: `${fellDelay}ms` }}>
             <div>РОСТЕР ПАЛ</div>
             <div className="small" style={{ fontWeight: 400 }}>
-              Никого не осталось. Слава начислена, новый стартовый ростер будет лучше.
+              Никого не осталось. Слава начислена; Сержант Барбос в Казарме выдаст новый стартовый ростер.
             </div>
-            <Button
-              primary
-              block
-              icon="🐾"
-              onClick={() => {
-                ensureRoster()
-                navigate("/army", true)
-              }}
-            >
-              Набрать новый ростер
-            </Button>
           </div>
         )}
 
@@ -194,8 +183,16 @@ export function BattleResultScreen() {
           </div>
           <div className="muted small">
             {`Выбито из врагов: 🦴 ${lb.rewards.loot}`}
-            {lb.rewards.treats > lb.rewards.loot ? ` · за победу: 🦴 ${lb.rewards.treats - lb.rewards.loot}` : ""}
+            {lb.result === "victory" && lb.rewards.treats > lb.rewards.loot
+              ? ` · за победу: 🦴 ${lb.rewards.treats - lb.rewards.loot}`
+              : ""}
           </div>
+          {lb.rewards.lost > 0 && (
+            <div className="small danger">
+              {`${lb.result === "defeat" ? "Поражение" : "Отступление"}: потеряно 🦴 ${lb.rewards.lost} — `
+                + "целиком добыча достаётся только победителям."}
+            </div>
+          )}
           <div className="row wrap small muted">
             <span>
               Убийств:
@@ -267,38 +264,16 @@ export function BattleResultScreen() {
         <RewardPicker toast={toast} />
 
         <div className="stack">
-          {!lb.armyFell && (
-            <>
-              <Button
-                primary
-                big
-                block
-                icon="⚔️"
-                className="pop-in"
-                style={{ animationDelay: `${next(120)}ms` }}
-                onClick={() => navigate("/battle/setup", true)}
-              >
-                Следующий бой
-              </Button>
-              <Button
-                block
-                icon="🏠"
-                className="pop-in"
-                style={{ animationDelay: `${next()}ms` }}
-                onClick={() => navigate("/army", true)}
-              >
-                Ростер и магазин
-              </Button>
-            </>
-          )}
           <Button
-            ghost
+            primary
+            big
             block
+            icon="🏡"
             className="pop-in"
-            style={{ animationDelay: `${next()}ms` }}
-            onClick={() => navigate("/", true)}
+            style={{ animationDelay: `${next(120)}ms` }}
+            onClick={() => navigate("/village", true)}
           >
-            В меню
+            В деревню
           </Button>
         </div>
       </div>

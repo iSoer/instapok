@@ -2,7 +2,7 @@ import type { UnitInstance } from "@game/core/types"
 import { canTakeClassNow, isUniqueClassId, openClasses, unitWeapon, weaponRank } from "@game/core/units"
 import { CLASS_IDS, classWeapons, fwClass, movementLabel } from "@game/content/classes"
 import { CLASS_TIERS, TIER_LABELS, TIER_LEVELS, earliestLevelOf } from "@shared/character/classes"
-import { SKILLS, SKILL_LABELS, rankAtLevel, skillsWith, type WeaponSkill } from "@shared/character/skills"
+import { SKILLS, SKILL_LABELS, rankAtLevel, skillsWith } from "@shared/character/skills"
 import { Button } from "./Button"
 import { BottomSheet } from "./Sheet"
 
@@ -15,11 +15,9 @@ export function aptitudeLine(unit: UnitInstance): string {
   return `Таланты: ${talents.join(", ") || "—"}${weak.length ? ` · Слабости: ${weak.join(", ")}` : ""}`
 }
 
-/** Оружие бойца: навык модели, его ранг и экипированная разновидность. */
+/** Оружие бойца: оружие в лапах и ранг навыка, которым он им владеет. */
 export function weaponLine(unit: UnitInstance): string {
-  const label = SKILL_LABELS[unit.weaponSkill]
-  const equipped = unitWeapon(unit).name
-  return `${label} ${weaponRank(unit)}${equipped === label ? "" : ` · ${equipped}`}`
+  return `${unitWeapon(unit).name} · ${SKILL_LABELS[unit.weaponSkill]} ${weaponRank(unit)}`
 }
 
 /** Ранги всех навыков на уровне бойца; ★ — талант, ▼ — слабость. */
@@ -48,10 +46,10 @@ interface ClassSheetProps {
   army: UnitInstance[]
   open: boolean
   onClose: () => void
-  onPick: (classId: string, weaponSkill: WeaponSkill) => void
+  onPick: (classId: string) => void
 }
 
-/** Шторка смены класса: открытые классы по ярусам с выбором оружия и ближайшие закрытые. */
+/** Шторка смены класса: открытые классы по ярусам (оружие класса — подсказка с рангами) и ближайшие закрытые. */
 export function ClassSheet({ unit, army, open, onClose, onPick }: ClassSheetProps) {
   const opened = new Set(open ? openClasses(unit) : [])
   const takenDivine = new Set(army.filter(u => u.id !== unit.id && isUniqueClassId(u.classId)).map(u => u.classId))
@@ -86,23 +84,19 @@ export function ClassSheet({ unit, army, open, onClose, onPick }: ClassSheetProp
                           {movementLabel(id)}
                           {blocked ? " · уже у другого бойца" : ""}
                         </div>
-                        <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
-                          {classWeapons(id).map((w) => {
-                            const current = id === unit.classId && w === unit.weaponSkill
-                            return (
-                              <Button
-                                key={w}
-                                sm
-                                disabled={current || blocked || !canTakeClassNow(unit, id)}
-                                onClick={() => onPick(id, w)}
-                              >
-                                {SKILL_LABELS[w]}
-                                {" "}
-                                {rankAtLevel(unit.aptitudes[w], unit.level)}
-                              </Button>
-                            )
-                          })}
+                        <div className="desc">
+                          {`Оружие класса: ${classWeapons(id)
+                            .map(w => `${SKILL_LABELS[w]} ${rankAtLevel(unit.aptitudes[w], unit.level)}`)
+                            .join(", ")}`}
                         </div>
+                        <Button
+                          sm
+                          style={{ marginTop: 6 }}
+                          disabled={id === unit.classId || blocked || !canTakeClassNow(unit, id)}
+                          onClick={() => onPick(id)}
+                        >
+                          {id === unit.classId ? "Текущий" : "Выбрать"}
+                        </Button>
                       </div>
                     </div>
                   )
@@ -136,7 +130,7 @@ export function ClassSheet({ unit, army, open, onClose, onPick }: ClassSheetProp
           <p className="muted small">
             Класс открывается, когда уровень достигает яруса (
             {CLASS_TIERS.slice(1).map(t => TIER_LEVELS[t]).join(" / ")}
-            ), а ранги навыков — требований класса. Смена класса бесплатна; при смене оружия экипировано базовое.
+            ), а ранги навыков — требований класса. Смена класса бесплатна, оружие остаётся в лапах.
           </p>
         </div>
       )}

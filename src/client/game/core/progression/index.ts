@@ -1,6 +1,9 @@
 import { createRng } from "../rng"
 import type {
   Army,
+  BattleResult,
+  Inventory,
+  StoreStock,
   BattleState,
   BattleSummary,
   LevelUpSummary,
@@ -15,6 +18,7 @@ import type {
 import { BARRACKS_CAP, MAX_LEVEL, SQUAD_SIZE, STATS } from "../types"
 import { generateUnit, levelGains, unitClassName } from "../units"
 import { treatsMultiplier } from "../skills/engine"
+import { addAll, generateStore } from "../items"
 import { GLORY_TIERS, LOOT, PRICES, REWARDS, SHOP, XP, gloryTier } from "@game/content/balance"
 import { EPITAPHS } from "@game/content/epitaphs"
 import { personalityText } from "@game/content/personalities"
@@ -114,7 +118,15 @@ export interface BattleResolution {
   profile: Profile
   memorial: MemorialEntry[]
   shelter: Shelter
+  /** Инвентарь с вернувшимся остатком рюкзака (снаряжение павших потеряно вместе с ними). */
+  inventory: Inventory
+  store: StoreStock
   rewardChoice?: UnitInstance[]
+}
+
+/** Доля выбитых за бой Вкусняшек, которая достаётся игроку при этом исходе. */
+export function lootShare(result: BattleResult): number {
+  return result === "victory" ? 1 : result === "defeat" ? REWARDS.defeatLootShare : REWARDS.retreatLootShare
 }
 
 export function resolveBattle(save: SaveGame, state: BattleState, now: number): BattleResolution {
@@ -160,8 +172,9 @@ export function resolveBattle(save: SaveGame, state: BattleState, now: number): 
   }
 
   const flawless = result === "victory" && fallen.length === 0
-  // Выбитое из врагов остаётся при любом исходе; победа добавляет бонус карты
+  // Выбитое из врагов достаётся целиком только при победе: поражение и отступление забирают часть; победа — бонус карты
   const loot = state.stats.loot
+  const kept = Math.round(loot * lootShare(result))
   let bonus = 0
   let glory = 0
   if (result === "victory") {
@@ -171,7 +184,7 @@ export function resolveBattle(save: SaveGame, state: BattleState, now: number): 
   }
   let mult = 1
   for (const s of survivors) mult *= treatsMultiplier(s)
-  const treats = Math.round((loot + bonus) * mult)
+  const treats = Math.round((kept + bonus) * mult)
   glory += fallen.length * REWARDS.gloryPerDeath
 
   const armyFell = nextUnits.length === 0
@@ -209,20 +222,22 @@ export function resolveBattle(save: SaveGame, state: BattleState, now: number): 
     fallen,
     xp: state.stats.xpGained,
     levelUps,
-    rewards: { treats, loot, glory, flawless },
+    rewards: { treats, loot, lost: loot - kept, glory, flawless },
     survivors,
     armyFell
   }
   const mvp = Object.entries(state.stats.xpGained).sort((a, b) => b[1] - a[1])[0]
   if (mvp) summary.mvpId = mvp[0]
 
-  // Магазин обновляется после каждого боя; бесплатная награда — если ростер ещё жив
+  // Витрина Казармы и Лавка обновляются после каждого боя; бесплатная награда — если ростер ещё жив
   const shelter: Shelter = generateShop(rng.int(0, 0x7fffffff), nextArmy, profile.glory, now)
+  const store = generateStore(rng.int(0, 0x7fffffff), nextArmy, profile.glory)
+  const inventory = addAll(save.inventory, state.pack ?? {})
   const rewardChoice = nextArmy
     ? generateRewardChoice(rng.int(0, 0x7fffffff), nextArmy, profile.glory, result === "victory", now)
     : undefined
 
-  return { summary, army: nextArmy, profile, memorial: [...save.memorial, ...fallen], shelter, rewardChoice }
+  return { summary, army: nextArmy, profile, memorial: [...save.memorial, ...fallen], shelter, inventory, store, rewardChoice }
 }
 
 function statDiff(a: UnitInstance, b: UnitInstance): Partial<Stats> {

@@ -1,7 +1,15 @@
 import { useStore } from "@nanostores/react"
 import type { Pos } from "@game/core/types"
 import { $boardLayout } from "@game/state/boardLayout"
-import { cancel, chooseAssist, chooseAttack, chooseMove, waitHere, type BattleUiState } from "@game/state/battleUi"
+import {
+  cancel,
+  chooseAssist,
+  chooseAttack,
+  chooseItems,
+  chooseMove,
+  waitHere,
+  type BattleUiState
+} from "@game/state/battleUi"
 import { haptic } from "@game/platform/haptics"
 
 interface MenuItem {
@@ -44,7 +52,7 @@ export function ContextMenu({ ui, topBand }: { ui: BattleUiState, topBand: numbe
     primary: !a.attack && !atOrigin,
     onClick: () => void waitHere()
   })
-  if (a.attack) items.push({ key: "items", icon: "🎒", label: "Предметы", disabled: true, caption: "скоро" })
+  if (a.items) items.push({ key: "items", icon: "🎒", label: "Предметы", onClick: chooseItems })
   items.push({ key: "cancel", icon: "✕", label: "Отмена", onClick: cancel })
 
   const n = items.length

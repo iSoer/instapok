@@ -1,3 +1,4 @@
+import { lootShare } from "@game/core/progression"
 import type { BattleState } from "@game/core/types"
 import { livingUnits } from "@game/core/battle/query"
 import { biomeDef } from "@game/content/biomes"
@@ -35,10 +36,15 @@ export function TopHud({ battle, ui }: { battle: BattleState, ui: BattleUiState 
       )}
       <span className="bf-grow" />
       {battle.stats.loot > 0 && (
-        <span className="bf-chip bf-loot" title="Выбито Вкусняшек за бой">
+        <span
+          className="bf-chip bf-loot"
+          title={`Добыча под угрозой: целиком — только при победе, при поражении — ${Math.round(lootShare("defeat") * 100)}%, `
+            + `при отступлении — ${Math.round(lootShare("retreat") * 100)}%`}
+        >
           🦴
           {" "}
           {battle.stats.loot}
+          <small className="bf-loot-risk">под угрозой</small>
         </span>
       )}
       <span className="bf-chip bf-biome">{biome.name}</span>

@@ -1,10 +1,20 @@
 import type { WeaponDef, WeaponVariant } from "@game/core/skills/types"
 import type { Color } from "@game/core/types"
 import { CHARACTER_STAT_LABELS } from "@shared/character/leveling"
-import { SKILL_LABELS, WEAPON_SKILLS, type WeaponSkill } from "@shared/character/skills"
+import {
+  SKILL_LABELS,
+  WEAPON_GRADE_LABELS,
+  WEAPON_SKILLS,
+  type Rank,
+  type WeaponGrade,
+  type WeaponSkill
+} from "@shared/character/skills"
+import { WEAPON_PRICES } from "./balance"
 
-// Оружие игры — оружейные навыки модели персонажа (`WEAPON_SKILLS`), названия — `SKILL_LABELS`.
-// Цвет треугольника, дальность, Mt и разновидности — боевые правила игры поверх модели.
+// Оружие игры — предметы под оружейные навыки модели (`WEAPON_SKILLS`), названия — `SKILL_LABELS` и
+// `WEAPON_GRADE_LABELS`. Цвет треугольника, дальность, Mt, грейды и разновидности — боевые правила игры поверх модели.
+// Навык отвечает за владение: оружием может сражаться любой боец, ранг навыка добавляет Mt, а ниже требуемого
+// ранга оружие теряет Mt (`COMBAT.rankShortMt` за каждую ступень).
 
 /** Треугольник FEH: Sword бьёт Axe, Axe бьёт Spear, Spear бьёт Sword; остальное бесцветное. */
 export const WEAPON_COLOR: Record<WeaponSkill, Color> = {
@@ -70,7 +80,7 @@ const SPECS: Record<WeaponSkill, WeaponSpec> = {
   }
 }
 
-/** Название разновидности: базовое оружие — название навыка модели, остальные — с приставкой. */
+/** Название разновидности: базовое оружие — грейд + навык модели, остальные — с приставкой (они железного грейда). */
 const VARIANT_PREFIX: Record<WeaponVariant, string> = {
   basic: "",
   brave: "Brave ",
@@ -79,27 +89,58 @@ const VARIANT_PREFIX: Record<WeaponVariant, string> = {
   cavslayer: "Horseslayer "
 }
 
+/** Грейды базового оружия: id, прибавка к Mt и ранг навыка, с которого им сражаются без штрафа. */
+const GRADES: Record<WeaponGrade, { id: string, mt: number, rank: Rank }> = {
+  wood: { id: "wood", mt: -2, rank: "E" },
+  iron: { id: "basic", mt: 0, rank: "E" },
+  steel: { id: "steel", mt: 2, rank: "D" },
+  silver: { id: "silver", mt: 4, rank: "B" }
+}
+
+/** Требуемый ранг разновидностей (все — железного грейда). */
+const VARIANT_RANK: Record<Exclude<WeaponVariant, "basic">, Rank> = {
+  brave: "C",
+  killer: "D",
+  armorslayer: "D",
+  cavslayer: "D"
+}
+
 const SPD = CHARACTER_STAT_LABELS.speed
 
 function build(): WeaponDef[] {
   const out: WeaponDef[] = []
   for (const skill of WEAPON_SKILLS) {
     const spec = SPECS[skill]
-    for (const variant of spec.variants) {
+    const base = (variant: WeaponVariant, grade: WeaponGrade, id: string, name: string, rank: Rank): WeaponDef => {
       const w: WeaponDef = {
-        id: `${skill}_${variant}`,
-        name: `${VARIANT_PREFIX[variant]}${SKILL_LABELS[skill]}`,
+        id,
+        name,
         kind: skill,
         color: WEAPON_COLOR[skill],
         range: spec.range,
         mt: spec.mt,
         variant,
+        grade,
+        requiredRank: rank,
+        price: variant === "basic" ? WEAPON_PRICES.grade[grade] : WEAPON_PRICES.variant[variant],
         magical: spec.magical,
         isStaff: spec.isStaff,
-        spCost: variant === "basic" ? 0 : 300,
         desc: spec.desc
       }
       if (spec.effectiveAgainst) w.effectiveAgainst = spec.effectiveAgainst
+      return w
+    }
+    for (const grade of Object.keys(GRADES) as WeaponGrade[]) {
+      const g = GRADES[grade]
+      const w = base("basic", grade, `${skill}_${g.id}`, `${WEAPON_GRADE_LABELS[grade]} ${SKILL_LABELS[skill]}`, g.rank)
+      w.mt += g.mt
+      if (grade === "wood") w.desc += " Простое оружие новичка."
+      out.push(w)
+    }
+    for (const variant of spec.variants) {
+      if (variant === "basic") continue
+      const name = `${VARIANT_PREFIX[variant]}${SKILL_LABELS[skill]}`
+      const w = base(variant, "iron", `${skill}_${variant}`, name, VARIANT_RANK[variant])
       switch (variant) {
         case "brave":
           w.mt -= 2
@@ -119,8 +160,6 @@ function build(): WeaponDef[] {
           w.effectiveAgainst = ["cavalry"]
           w.desc += " Эффективно против cavalry."
           break
-        default:
-          break
       }
       out.push(w)
     }
@@ -137,8 +176,22 @@ export function weaponDef(id: string): WeaponDef {
   return w
 }
 
+/** Железное оружие навыка (бывший «базовый» id: сейвы v5 и враги). */
 export function basicWeaponId(skill: WeaponSkill): string {
   return `${skill}_basic`
+}
+
+/** Простое деревянное оружие: с ним начинает каждый новый боец, оно бесплатно и не хранится в инвентаре. */
+export function woodWeaponId(skill: WeaponSkill): string {
+  return `${skill}_wood`
+}
+
+export function gradeWeaponId(skill: WeaponSkill, grade: WeaponGrade): string {
+  return `${skill}_${GRADES[grade].id}`
+}
+
+export function isWeaponId(id: string): boolean {
+  return WEAPON_MAP.has(id)
 }
 
 export function weaponsForSkill(skill: WeaponSkill): WeaponDef[] {

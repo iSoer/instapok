@@ -1,7 +1,7 @@
 import type { BattleState, BattleUnit, Effect, Pos, Stats, Strike, Triangle, UnitInstance } from "../types"
 import { STATS, addStats, emptyStats, manhattan } from "../types"
 import type { CombatCtx, CombatUnitView, StrikeInfo } from "../skills/types"
-import { counterAnyRange, specialMaxCd, unitKit, wrathfulStaff } from "../skills/engine"
+import { counterAnyRange, negatesEffective, specialMaxCd, unitKit, wrathfulStaff } from "../skills/engine"
 import { visibleStats } from "../units"
 import { livingUnits, terrainAt } from "../battle/query"
 import { COMBAT } from "@game/content/balance"
@@ -120,8 +120,8 @@ export function simulateCombat(
   const hooksD = unitKit(D.unit).hooks
 
   const triangle = triangleOf(A.weapon, D.weapon)
-  const aEff = (A.weapon.effectiveAgainst ?? []).includes(D.cls.moveType)
-  const dEff = (D.weapon.effectiveAgainst ?? []).includes(A.cls.moveType)
+  const aEff = (A.weapon.effectiveAgainst ?? []).includes(D.cls.moveType) && !negatesEffective(D.unit)
+  const dEff = (D.weapon.effectiveAgainst ?? []).includes(A.cls.moveType) && !negatesEffective(A.unit)
   const dist = manhattan(a.pos, d.pos)
   const canCounter = D.weapon.range === dist || counterAnyRange(D.unit)
 

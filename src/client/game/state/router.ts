@@ -2,6 +2,8 @@ import { atom } from "nanostores"
 
 export type Route
   = | { name: "menu" }
+    | { name: "village" }
+    | { name: "store" }
     | { name: "army" }
     | { name: "armyCreate" }
     | { name: "recruit" }
@@ -29,6 +31,8 @@ export function parseRoute(hash: string): Route {
     if (b === "setup") return { name: "battleSetup" }
     if (b === "result") return { name: "battleResult" }
   }
+  if (a === "village") return { name: "village" }
+  if (a === "store") return { name: "store" }
   if (a === "memorial") return { name: "memorial" }
   if (a === "settings") return { name: "settings" }
   return { name: "notFound", path }
@@ -38,6 +42,10 @@ export function routePath(r: Route): string {
   switch (r.name) {
     case "menu":
       return "/"
+    case "village":
+      return "/village"
+    case "store":
+      return "/store"
     case "army":
       return "/army"
     case "armyCreate":

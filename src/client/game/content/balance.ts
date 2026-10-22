@@ -160,6 +160,32 @@ export const PRICES = {
   sharpen: [200, 500, 1000] as const
 }
 
+/**
+ * Цены оружия в Лавке. Базовое — по грейду (деревянное бесплатно и не продаётся), разновидности — железного грейда.
+ * Медианный бой на «Нормально» отрядом 5-го уровня (~125 🦴) окупает железное оружие с запасом, стальное — за бой.
+ */
+export const WEAPON_PRICES = {
+  grade: { wood: 0, iron: 60, steel: 160, silver: 420 },
+  variant: { brave: 320, killer: 220, armorslayer: 200, cavslayer: 200 }
+} as const
+
+/** Лавка и рюкзак вылазки. */
+export const ITEMS = {
+  /** Сколько расходников всего можно взять в одну вылазку. */
+  packSize: 5,
+  /** Больше этого количества одного предмета в инвентаре не купить. */
+  stackCap: 99,
+  /** Разновидностей оружия на витрине (Славы ≥ 150 — на одну больше). */
+  variantOffers: 2,
+  /** Стальное оружие — с уровня ростера 10 (3 навыка), серебряное — с 30 (2 навыка). */
+  steelFromLevel: 10,
+  steelOffers: 3,
+  silverFromLevel: 30,
+  silverOffers: 2,
+  /** Талисманов на витрине (Славы ≥ 150 — на один больше). */
+  talismanOffers: 4
+}
+
 export const XP = {
   /** 80 уровней модели персонажа: уровень вдвое дешевле, чем при прежних 40. */
   perLevel: 50,
@@ -176,7 +202,7 @@ export const SP = {
   combat: 4,
   kill: 8,
   assist: 4,
-  costs: { assist: 150, special: 200, passive: [120, 200, 300] as const, weapon: 300 }
+  costs: { assist: 150, special: 200, passive: [120, 200, 300] as const }
 }
 
 export const REWARDS = {
@@ -185,6 +211,10 @@ export const REWARDS = {
   treatsPerLevel: 8,
   victoryShare: 0.5,
   flawlessBonus: 0.5,
+  /** Доля выбитых Вкусняшек, которая достаётся при поражении (всё выбитое — только при победе). */
+  defeatLootShare: 0.5,
+  /** Доля выбитого при отступлении и сдаче: больше, чем при поражении, — отступить вовремя разумно. */
+  retreatLootShare: 0.75,
   gloryPerDeath: 1,
   armyFallMinGlory: 5,
   /** Сколько кандидатов в бесплатной награде после боя (забрать можно одного). */
@@ -248,6 +278,8 @@ export const COMBAT = {
   followUpSpd: 5,
   staffMult: 0.5,
   weaponTierMt: 2,
+  /** Ниже требуемого ранга навыка оружие теряет столько Mt за каждую ступень ранга. */
+  rankShortMt: 2,
   /** Mt за ранг оружейного навыка FW: floor(номер ранга × rankMt), E…D — 0, S — +3. */
   rankMt: 1 / 3,
   /** Вожак сильнее обычного врага на столько к каждому боевому стату. */

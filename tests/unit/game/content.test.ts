@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { CLASS_IDS, classWeapons } from "@game/content/classes"
-import { SKILL_LABELS } from "@shared/character/skills"
+import { SKILL_LABELS, WEAPON_GRADE_LABELS } from "@shared/character/skills"
 import { WEAPONS } from "@game/content/weapons"
 import { SPECIALS } from "@game/content/skills/specials"
 import { ASSISTS } from "@game/content/skills/assists"
@@ -33,9 +33,12 @@ describe("контент", () => {
   it("ссылки целостны", () => {
     for (const id of CLASS_IDS) {
       for (const skill of classWeapons(id)) {
-        // Базовое оружие есть для каждого оружия класса и называется как навык модели
+        // Деревянное и железное оружие есть для каждого оружия класса; названия — грейд и навык модели
         const basic = WEAPONS.find(w => w.id === `${skill}_basic`)
-        expect(basic?.name).toBe(SKILL_LABELS[skill])
+        expect(basic?.name).toBe(`${WEAPON_GRADE_LABELS.iron} ${SKILL_LABELS[skill]}`)
+        const wood = WEAPONS.find(w => w.id === `${skill}_wood`)
+        expect(wood?.name).toBe(`${WEAPON_GRADE_LABELS.wood} ${SKILL_LABELS[skill]}`)
+        expect(wood?.price).toBe(0)
       }
     }
     for (const b of BIOMES) expect(FACTIONS.some(f => f.id === b.factionId)).toBe(true)

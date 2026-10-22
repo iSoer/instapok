@@ -13,6 +13,7 @@ import {
   type ReachMap
 } from "@game/core/map/pathing"
 import { assistTargetsFrom, planAssist, type AssistPlan } from "@game/core/battle/assist"
+import { packItems } from "@game/core/battle/items"
 import { simulateCombat, type CombatOutcome } from "@game/core/combat"
 import { allPlayerUnitsActed } from "@game/core/battle/reducer"
 import { nextEnemyAction } from "@game/core/ai"
@@ -39,6 +40,7 @@ export type UiMode
     | "forecast"
     | "assistPreview"
     | "wallPreview"
+    | "itemSelect"
     | "enemyInfo"
     | "busy"
     | "ended"
@@ -49,8 +51,8 @@ export interface ContextActions {
   attack: boolean
   assist: boolean
   wait: boolean
-  /** Предметов в игре пока нет — кнопка всегда неактивна. */
-  items: false
+  /** В рюкзаке вылазки есть расходники. */
+  items: boolean
 }
 
 const NO_ACTIONS: ContextActions = { move: false, attack: false, assist: false, wait: false, items: false }
@@ -225,7 +227,7 @@ function actionsAt(st: BattleState, bu: BattleUnit, reach: ReachMap, at: Pos, at
   }
   else assist = assistTargetsFrom(st, bu, at).length > 0
   const move = [...reach.values()].some(n => n.canStop && !samePos(n.pos, bu.pos))
-  return { move, attack, assist, wait: true, items: false }
+  return { move, attack, assist, wait: true, items: bu.side === "player" && packItems(st).length > 0 }
 }
 
 function selectUnit(st: BattleState, bu: BattleUnit, extra: Partial<BattleUiState> = {}): void {
@@ -661,6 +663,7 @@ export function cancel(): void {
     case "wallPreview":
     case "attackTargeting":
     case "assistTargeting":
+    case "itemSelect":
       return backFromTargeting(st, sel)
     case "movedPreview":
     case "moveTargeting":
@@ -668,6 +671,24 @@ export function cancel(): void {
     default:
       return clearSelection()
   }
+}
+
+/** «Предметы»: открыть список рюкзака для бойца на movedTo (или на месте). */
+export function chooseItems(): void {
+  const st = state()
+  const ui = $battleUi.get()
+  if (!st || !ui.selectedId || ui.busy || !ui.actions.items) return
+  patch({ mode: "itemSelect", targetId: undefined, forecast: undefined, assistPlan: undefined, wallPos: undefined })
+}
+
+/** Применить предмет рюкзака к цели (сам боец или сосед); тратит действие. */
+export async function applyItem(itemId: string, targetId: string): Promise<void> {
+  const st = state()
+  const ui = $battleUi.get()
+  if (!st || !ui.selectedId || ui.busy) return
+  const sel = st.units[ui.selectedId]
+  if (!sel) return
+  await commit({ type: "item", unitId: ui.selectedId, to: ui.movedTo ?? sel.pos, targetId, itemId })
 }
 
 /** «Ждать» на movedTo (или на месте). */

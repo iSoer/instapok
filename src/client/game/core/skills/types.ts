@@ -1,4 +1,5 @@
 import type { ClassTier } from "@shared/character/classes"
+import type { Rank, WeaponGrade } from "@shared/character/skills"
 import type {
   BattleState,
   BattleUnit,
@@ -23,6 +24,11 @@ export interface WeaponDef {
   range: 1 | 2
   mt: number
   variant: WeaponVariant
+  grade: WeaponGrade
+  /** Ранг навыка, с которого оружием сражаются без штрафа к Mt. */
+  requiredRank: Rank
+  /** Цена в Лавке (деревянное — 0, не продаётся). */
+  price: number
   /** Бьёт по Res, а не по Def. */
   magical: boolean
   isStaff: boolean
@@ -30,7 +36,6 @@ export interface WeaponDef {
   spdMod?: number
   /** Изменение стартового/максимального кулдауна спецприёма. */
   cdMod?: number
-  spCost: number
   desc: string
 }
 
@@ -105,6 +110,8 @@ export interface SkillHooks {
   survive?: (ctx: CombatCtx) => boolean
   xpMultiplier?: number
   treatsMultiplier?: number
+  /** Оружие врага не эффективно против бойца (талисман). */
+  negateEffective?: boolean
   onAllyDeath?: (state: BattleState, self: BattleUnit, dead: BattleUnit, killer?: BattleUnit) => Effect[]
 }
 
@@ -186,4 +193,35 @@ export interface TraitDef {
   hooks: SkillHooks
   onlySpecies?: Species
   rare?: boolean
+}
+
+/** Расходник Лавки: используется в бою командой «Предмет» на себя или соседнего союзника. */
+export interface ConsumableDef {
+  id: string
+  name: string
+  icon: string
+  desc: string
+  price: number
+  /** Лечение: фиксированное и/или доля maxHp (берётся большее). */
+  heal?: number
+  healPct?: number
+  /** Снимает штрафы (`penalties`). */
+  cleanse?: boolean
+  /** Действует на применившего и всех союзников в радиусе (цель — сам боец). */
+  area?: number
+  /** В ассортименте с уровня ростера / Славы. */
+  minRosterLevel?: number
+  minGlory?: number
+}
+
+/** Талисман: аксессуар в единственном слоте бойца, пассивные свойства — хуки навыков (попадают в прогноз боя). */
+export interface TalismanDef {
+  id: string
+  name: string
+  icon: string
+  desc: string
+  price: number
+  hooks: SkillHooks
+  minRosterLevel?: number
+  minGlory?: number
 }

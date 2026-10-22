@@ -117,6 +117,8 @@ export interface UnitInstance {
   maxStats: StatValues
   archetype: Archetype
   weaponTier: 0 | 1 | 2 | 3
+  /** Талисман (`content/items.ts`): один слот, пассивные свойства через хуки навыков. */
+  accessory?: string
   skills: UnitSkills
   learned: string[]
   learnable: string[]
@@ -256,6 +258,8 @@ export interface BattleState {
   /** Порядок хода врагов в текущей фазе (null = не рассчитан). */
   enemyQueue: string[] | null
   startedAt: number
+  /** Рюкзак вылазки: расходники, взятые из инвентаря; остаток возвращается после боя. */
+  pack: Inventory
 }
 
 export type Effect
@@ -288,6 +292,7 @@ export type BattleAction
     | { type: "attackWall", unitId: string, to: Pos, wall: Pos, newStance?: Stance }
     | { type: "assist", unitId: string, to: Pos, targetId: string, newStance?: Stance }
     | { type: "wait", unitId: string, to: Pos, newStance?: Stance }
+    | { type: "item", unitId: string, to: Pos, targetId: string, itemId: string, newStance?: Stance }
     | { type: "endPhase" }
     | { type: "retreat" }
 
@@ -316,6 +321,15 @@ export type BattleEvent
       targetHpAfter?: number
       unitHpAfter?: number
     }
+    | {
+      type: "item"
+      unitId: string
+      targetId: string
+      itemId: string
+      /** Кого и на сколько вылечил предмет (у «котелка» — несколько союзников). */
+      heals: { unitId: string, amount: number, hpAfter: number }[]
+      cleansed: string[]
+    }
     | { type: "effect", effect: Effect, hpAfter?: number }
     | { type: "died", unitId: string, killerId?: string, pos: Pos, side: Side }
     | { type: "loot", unitId: string, pos: Pos, amount: number }
@@ -334,6 +348,8 @@ export interface ReduceResult {
 /* ---------- Сейв ---------- */
 
 export interface Profile {
+  /** Когда начата текущая игра; нет — игры нет, на главном экране только «Новая игра». */
+  startedAt?: number
   glory: number
   treats: number
   wins: Record<Difficulty, number>
@@ -346,12 +362,37 @@ export interface Shelter {
   seed: number
 }
 
-/** Разведанный бой: карта и враги уже известны, игрок собирает под них отряд. */
+/** Разведанный бой: карта и враги уже известны, игрок собирает под них отряд и рюкзак. */
 export interface PendingBattle {
   seed: number
   difficulty: Difficulty
   biomeId: string
   map: MapDef
+  /** Выбранные в рюкзак расходники (ещё в инвентаре, списываются при старте боя). */
+  pack?: Inventory
+}
+
+/** Инвентарь армии: id предмета (оружие, расходник, талисман) → количество. */
+export type Inventory = Record<string, number>
+
+export type ItemCategory = "weapon" | "consumable" | "talisman"
+
+/** Ассортимент Лавки: обновляется после каждого боя, товаров не убывает. */
+export interface StoreStock {
+  seed: number
+  weapons: string[]
+  consumables: string[]
+  talismans: string[]
+  /** Ассортимент обновился, а игрок ещё не заглядывал в Лавку («!» над торговцем). */
+  fresh: boolean
+}
+
+export type Facing = "down" | "up" | "left" | "right"
+
+/** Герой в деревне: позиция в клетках карты (дробная — движение свободное). */
+export interface VillageState {
+  pos: Pos
+  facing: Facing
 }
 
 export interface GlobalStats {
@@ -379,8 +420,11 @@ export interface BattleSummary {
   fallen: MemorialEntry[]
   xp: Record<string, number>
   levelUps: LevelUpSummary[]
-  /** treats — всего за бой: выбитое (loot) + бонус за победу. */
-  rewards: { treats: number, loot: number, glory: number, flawless: boolean }
+  /**
+   * treats — всего за бой: доля выбитого (loot) по исходу + бонус за победу; lost — сколько выбитого потеряно
+   * из-за поражения или отступления.
+   */
+  rewards: { treats: number, loot: number, lost: number, glory: number, flawless: boolean }
   mvpId?: string
   survivors: UnitInstance[]
   armyFell: boolean
@@ -393,6 +437,9 @@ export interface SaveGame {
   army?: Army
   battle?: BattleState
   shelter: Shelter
+  inventory: Inventory
+  store: StoreStock
+  village: VillageState
   memorial: MemorialEntry[]
   achievements: string[]
   settings: Settings

@@ -10,6 +10,8 @@ import { BattleScreen } from "./screens/BattleScreen"
 import { BattleResultScreen } from "./screens/BattleResultScreen"
 import { MemorialScreen } from "./screens/MemorialScreen"
 import { SettingsScreen } from "./screens/SettingsScreen"
+import { VillageScreen } from "./screens/VillageScreen"
+import { StoreScreen } from "./screens/StoreScreen"
 import { critterSvg, furArt } from "@game/art/index"
 
 const SPLASH_TRIO = [
@@ -73,6 +75,10 @@ function Screen({ route }: { route: Route }) {
   switch (route.name) {
     case "menu":
       return <MenuScreen />
+    case "village":
+      return <VillageScreen />
+    case "store":
+      return <StoreScreen />
     case "army":
       return <ArmyScreen />
     case "armyCreate":

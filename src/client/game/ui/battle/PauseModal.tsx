@@ -95,7 +95,8 @@ export function PauseModal({ battle }: { battle: BattleState }) {
       <ConfirmModal
         open={retreatAsk}
         title="Отступить?"
-        text="Наград не будет. Погибшие останутся мёртвыми. Опыт, полученный в этом бою, сохранится."
+        text={"Из выбитых Вкусняшек достанутся три четверти, бонуса за победу не будет. "
+          + "Погибшие останутся мёртвыми, опыт сохранится."}
         confirmLabel="Отступить"
         danger
         onConfirm={() => {

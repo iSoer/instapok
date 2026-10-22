@@ -8,12 +8,14 @@ import { Toast } from "../components/Toast"
 import { $pauseOpen } from "../lib/pause"
 import { TopHud } from "../battle/TopHud"
 import { ContextMenu } from "../battle/ContextMenu"
+import { ItemMenu } from "../battle/ItemMenu"
 import { BottomBand } from "../battle/BottomBand"
 import { ForecastCard } from "../battle/ForecastCard"
 import { EndTurnButton } from "../battle/EndTurnButton"
 import { EndTurnPrompt } from "../battle/EndTurnPrompt"
 import { PauseModal } from "../battle/PauseModal"
 import "../battle.css"
+import "../village.css"
 import { setBoardInsets } from "@game/state/boardLayout"
 
 /** Высота верхней полосы HUD (для размещения меню над клеткой) и отступы поля под накладки. */
@@ -102,6 +104,7 @@ export function BattleScreen() {
           {ui.mode === "forecast" && ui.forecast && <ForecastCard state={battle} forecast={ui.forecast} />}
         </div>
         <ContextMenu ui={ui} topBand={TOP_BAND + safeTop} />
+        <ItemMenu battle={battle} ui={ui} />
         <EndTurnButton battle={battle} ui={ui} />
         <EndTurnPrompt battle={battle} ui={ui} />
         <div className="bf-bottom">

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useStore } from "@nanostores/react"
 import type { UnitInstance } from "@game/core/types"
-import { BARRACKS_CAP } from "@game/core/types"
+import { BARRACKS_CAP, SQUAD_SIZE } from "@game/core/types"
 import {
   displayName,
   hasClassUpgrade,
@@ -11,7 +11,7 @@ import {
   unitClassName,
   visibleStats
 } from "@game/core/units"
-import { $save, ensureRoster, freeSlots } from "@game/state/save"
+import { $save, ensureRoster, freeSlots, toggleSquad } from "@game/state/save"
 import { navigate } from "@game/state/router"
 import { haptic } from "@game/platform/haptics"
 import { Button } from "../components/Button"
@@ -30,12 +30,14 @@ function FilledSlot({
   unit,
   index,
   justHired,
-  inSquad
+  inSquad,
+  onToggleSquad
 }: {
   unit: UnitInstance
   index: number
   justHired: boolean
   inSquad: boolean
+  onToggleSquad: (id: string) => void
 }) {
   const cls = unitClass(unit)
   const st = visibleStats(unit)
@@ -73,7 +75,16 @@ function FilledSlot({
         <WeaponBadge skill={cls.weaponSkill} />
         {canLearn && <span className="chip red pop">Есть навык</span>}
         {hasClassUpgrade(unit) && <span className="chip gold pop">Новый класс</span>}
-        {inSquad && <span className="chip squad">В отряде</span>}
+        <button
+          type="button"
+          className={`chip squad-toggle ${inSquad ? "squad" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSquad(unit.id)
+          }}
+        >
+          {inSquad ? "✓ В отряде" : "+ В отряд"}
+        </button>
       </div>
       <div className="mini-stats">
         <span>
@@ -122,7 +133,7 @@ export function ArmyScreen() {
   if (!army || army.units.length === 0) {
     return (
       <div className="screen">
-        <TopBar title="Ростер" right={<ResourceBar />} onBack={() => navigate("/", true)} />
+        <TopBar title="Казарма" right={<ResourceBar />} onBack={() => navigate("/village", true)} />
         <div className="screen-body">
           <div className="empty">
             <div className="big">🪦</div>
@@ -137,13 +148,19 @@ export function ArmyScreen() {
     )
   }
 
+  const onToggleSquad = (id: string) => {
+    const r = toggleSquad(id)
+    if (!r.ok) return toast(r.error ?? "Ошибка", true)
+    haptic("select")
+  }
+
   // Сначала отряд, затем остальные по уровню
   const squad = new Set(army.squadIds)
   const units = [...army.units].sort((a, b) => Number(squad.has(b.id)) - Number(squad.has(a.id)) || b.level - a.level)
 
   return (
     <div className="screen">
-      <TopBar title="Ростер" right={<ResourceBar />} onBack={() => navigate("/", true)} />
+      <TopBar title="Казарма" right={<ResourceBar />} onBack={() => navigate("/village", true)} />
       <div className="screen-body">
         <RewardPicker toast={toast} onClaimed={welcome} />
         <div className="row between">
@@ -154,28 +171,35 @@ export function ArmyScreen() {
             /
             {BARRACKS_CAP}
           </span>
-          <span className="muted small">Отряд на бой выбирается при подготовке</span>
+          <span className="muted small">{`Отряд: ${army.squadIds.length}/${SQUAD_SIZE}`}</span>
         </div>
         <div className="slot-grid">
           {units.map((u, i) => (
-            <FilledSlot key={u.id} unit={u} index={i} justHired={justHired === u.id} inSquad={squad.has(u.id)} />
+            <FilledSlot
+              key={u.id}
+              unit={u}
+              index={i}
+              justHired={justHired === u.id}
+              inSquad={squad.has(u.id)}
+              onToggleSquad={onToggleSquad}
+            />
           ))}
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <Button
-            block
-            icon="🛒"
-            onClick={() => {
-              haptic("select")
-              setShopOpen(true)
-            }}
-          >
-            {`Магазин (${save.shelter.candidates.length})`}
-          </Button>
-          <Button block icon="⚔️" onClick={() => navigate("/battle/setup")} primary>
-            К бою
-          </Button>
-        </div>
+        {army.units.length < SQUAD_SIZE && (
+          <div className="warning-box">{`Не хватает бойцов в отряд (${army.units.length}/${SQUAD_SIZE}) — наймите.`}</div>
+        )}
+        <Button
+          block
+          primary={army.units.length < SQUAD_SIZE}
+          icon="🐾"
+          onClick={() => {
+            haptic("select")
+            setShopOpen(true)
+          }}
+        >
+          {`Набор (${save.shelter.candidates.length})`}
+        </Button>
+        <p className="muted small hint-line">В бой отряд ведёт Разведчик Шрам у домика Вылазок.</p>
         {freeSlots(save) === 0 && (
           <p className="muted small hint-line">Ростер полон: чтобы взять новых, кого-то придётся отпустить.</p>
         )}

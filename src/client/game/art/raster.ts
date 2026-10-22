@@ -16,8 +16,10 @@ export function svgToImage(key: string, svg: string, width: number, height: numb
     img.decoding = "async"
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error(`svg raster failed: ${key}`))
-    // Явные width/height в корне SVG нужны, чтобы браузер отрисовал картинку нужного размера.
-    const sized = svg.replace(/<svg\b/, `<svg width="${width}" height="${height}"`)
+    // Явные width/height в корне SVG нужны, чтобы браузер отрисовал картинку нужного размера; заданные в самом SVG
+    // убираем, иначе атрибуты задвоятся и картинка не загрузится.
+    const sized = svg.replace(/<svg\b[^>]*>/, tag =>
+      tag.replace(/\s(width|height)="[^"]*"/g, "").replace(/^<svg/, `<svg width="${width}" height="${height}"`))
     img.src = svgDataUri(sized)
   })
   cache.set(cacheKey, p)

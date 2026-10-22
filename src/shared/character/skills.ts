@@ -43,6 +43,18 @@ export const SKILL_LABELS: Record<Skill, string> = {
   heavyArmor: "Heavy Armor"
 }
 
+/** Weapon grades, from the starting wooden weapon to silver (the game sells them, the rank of the skill wields them) */
+export const WEAPON_GRADES = ["wood", "iron", "steel", "silver"] as const
+
+export type WeaponGrade = typeof WEAPON_GRADES[number]
+
+export const WEAPON_GRADE_LABELS: Record<WeaponGrade, string> = {
+  wood: "Wooden",
+  iron: "Iron",
+  steel: "Steel",
+  silver: "Silver"
+}
+
 /**
  * How a rank grows with the level: `start` at level 1, then linearly to `end` at `endLevel`, rounded down.
  * A talent reaches C by level 20, B+ by 35, A by 45 and S by 55, just in time for each class tier;

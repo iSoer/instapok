@@ -29,7 +29,7 @@ export interface AnySkillInfo {
 
 export function skillInfo(id: string): AnySkillInfo | undefined {
   const w = WEAPONS.find(x => x.id === id)
-  if (w) return { id, name: w.name, desc: w.desc, slot: "weapon", spCost: w.spCost }
+  if (w) return { id, name: w.name, desc: w.desc, slot: "weapon", spCost: 0 }
   const a = ASSISTS.find(x => x.id === id)
   if (a) return { id, name: a.name, desc: a.desc, slot: "assist", spCost: a.spCost }
   const s = SPECIALS.find(x => x.id === id)

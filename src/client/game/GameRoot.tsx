@@ -5,6 +5,10 @@ import { initRouter } from "./state/router"
 import { $battleUi, confirm, endTurn, tapTile, waitHere } from "./state/battleUi"
 import { $boardLayout } from "./state/boardLayout"
 import { $save, initSave } from "./state/save"
+import { $villageUi, openNpc, villageControl } from "./state/village"
+import { NPCS, type NpcId } from "./content/village"
+import { spotNear } from "./core/village"
+import type { Pos } from "./core/types"
 import "./ui/styles.css"
 
 /**
@@ -21,7 +25,17 @@ export default function GameRoot() {
       ui: $battleUi,
       layout: $boardLayout,
       // Действия игрока в бою — для смоук-тестов и проверки анимаций
-      battle: { tapTile, confirm, waitHere, endTurn }
+      battle: { tapTile, confirm, waitHere, endTurn },
+      // Деревня: телепорт героя (к NPC или в точку), подойти и заговорить, сразу открыть разговор
+      village: {
+        ui: $villageUi,
+        teleport: (to: NpcId | Pos) => {
+          const npc = typeof to === "string" ? NPCS.find(n => n.id === to) : undefined
+          villageControl()?.teleport(npc ? spotNear(npc) : (to as Pos))
+        },
+        walkTo: (id: NpcId) => villageControl()?.walkTo(id),
+        talk: (id: NpcId) => openNpc(id)
+      }
     }
   }, [])
 

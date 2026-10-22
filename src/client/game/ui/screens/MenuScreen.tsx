@@ -1,9 +1,8 @@
 import { useState } from "react"
 import { useStore } from "@nanostores/react"
-import { BARRACKS_CAP } from "@game/core/types"
-import { $save, ensureRoster, surrenderFromMenu } from "@game/state/save"
+import { $save, gameStarted, newGame, surrenderFromMenu } from "@game/state/save"
 import { navigate } from "@game/state/router"
-import { generateUnit, learnableNow, skillCost } from "@game/core/units"
+import { generateUnit } from "@game/core/units"
 import { backdropSvg } from "@game/art/index"
 import type { UnitInstance } from "@game/core/types"
 import { Button } from "../components/Button"
@@ -67,22 +66,25 @@ export function MenuScreen() {
   const save = useStore($save)
   const army = save.army
   const battle = save.battle
-  const hasBattle = !!battle && !battle.result
+  const started = gameStarted(save)
+  const hasBattle = started && !!battle && !battle.result
   const [surrender, setSurrender] = useState(false)
+  const [confirmNew, setConfirmNew] = useState(false)
 
-  const pendingSkills = army ? army.units.filter(u => learnableNow(u).some(id => skillCost(id) <= u.sp)).length : 0
-  // В диораме — сначала отряд, потом остальные бойцы; без армии — демо-тройка.
+  // В диораме — бойцы ростера; без них — демо-тройка.
   const crew: UnitInstance[] = army && army.units.length > 0 ? army.units.slice(0, 3) : DEMO_CREW
 
-  const onFight = () => {
-    if (hasBattle) return navigate("/battle")
-    ensureRoster()
-    navigate("/battle/setup")
+  const onContinue = () => {
+    haptic("select")
+    navigate(hasBattle ? "/battle" : "/village")
   }
-  const onArmy = () => {
-    ensureRoster()
-    navigate("/army")
+  const startNew = () => {
+    setConfirmNew(false)
+    haptic("heavy")
+    newGame()
+    navigate("/village")
   }
+  const onNew = () => (started ? setConfirmNew(true) : startNew())
   const doSurrender = () => {
     setSurrender(false)
     haptic("warning")
@@ -90,20 +92,16 @@ export function MenuScreen() {
     navigate("/battle/result")
   }
 
-  const armyLabel = army
-    ? `Ростер: ${army.units.length} ${plural(army.units.length, "персонаж", "персонажа", "персонажей")}`
-    : "Ростера нет"
-  const fightSub = hasBattle
+  const units = army?.units.length ?? 0
+  const continueSub = hasBattle
     ? `Ход ${battle?.turn ?? 1} · бой ждёт`
-    : army
-      ? "Разведка и выбор отряда"
-      : "Получите стартовый ростер"
+    : `🦴 ${save.profile.treats} · ${units} ${plural(units, "боец", "бойца", "бойцов")} · в деревню`
 
   return (
     <div className="screen menu">
       <div className="row between">
         <ResourceBar />
-        <span className="muted small">{armyLabel}</span>
+        {started && <span className="muted small">{`Ростер: ${units}`}</span>}
       </div>
       <div className="menu-hero">
         <div className="paper-frame">
@@ -114,45 +112,25 @@ export function MenuScreen() {
         <p className="muted">Тактика про котиков, собачек и мышек</p>
       </div>
       <div className="menu-actions">
-        {hasBattle
-          ? (
-              <>
-                <Button big primary block glow icon="⚔️" onClick={onFight}>
-                  <span className="lbl">
-                    Продолжить бой
-                    <div className="sub">{fightSub}</div>
-                  </span>
-                </Button>
-                <Button ghost sm block onClick={() => setSurrender(true)}>
-                  🏳️ Сдаться
-                </Button>
-              </>
-            )
-          : (
-              <Button big primary block icon="⚔️" onClick={onFight}>
-                <span className="lbl">
-                  В бой
-                  <div className="sub">{fightSub}</div>
-                </span>
-              </Button>
-            )}
-        <div className="relative">
-          <Button big block icon="🐾" onClick={onArmy}>
+        {started && (
+          <Button big primary block glow={hasBattle} icon={hasBattle ? "⚔️" : "🏡"} onClick={onContinue}>
             <span className="lbl">
-              Ростер и магазин
-              <div className="sub">
-                {save.rewardChoice
-                  ? "🎁 Ждёт награда за бой"
-                  : army ? `${army.units.length}/${BARRACKS_CAP} персонажей` : "Стартовый ростер"}
-              </div>
+              {hasBattle ? "Продолжить бой" : "Продолжить"}
+              <div className="sub">{continueSub}</div>
             </span>
           </Button>
-          {(pendingSkills > 0 || !!save.rewardChoice) && (
-            <span className="badge-count" title="Есть что изучить">
-              {pendingSkills + (save.rewardChoice ? 1 : 0)}
-            </span>
-          )}
-        </div>
+        )}
+        {hasBattle && (
+          <Button ghost sm block onClick={() => setSurrender(true)}>
+            🏳️ Сдаться
+          </Button>
+        )}
+        <Button big block primary={!started} icon="✨" onClick={onNew}>
+          <span className="lbl">
+            Новая игра
+            <div className="sub">{started ? "Прогресс будет стёрт" : "Стартовый ростер и деревня"}</div>
+          </span>
+        </Button>
         <div className="menu-secondary">
           <Button ghost icon="🪦" onClick={() => navigate("/memorial")}>
             Кладбище
@@ -166,11 +144,21 @@ export function MenuScreen() {
       <ConfirmModal
         open={surrender}
         title="Сдаться?"
-        text="Бой засчитается как отступление: наград не будет, погибшие останутся мёртвыми, выжившие вернутся домой."
+        text={"Бой засчитается как отступление: из выбитого достанется только часть, "
+          + "погибшие останутся мёртвыми, выжившие вернутся в деревню."}
         confirmLabel="Сдаться"
         danger
         onConfirm={doSurrender}
         onClose={() => setSurrender(false)}
+      />
+      <ConfirmModal
+        open={confirmNew}
+        title="Начать новую игру?"
+        text="Ростер, инвентарь, Вкусняшки, Слава и Кладбище будут стёрты. Настройки сохранятся."
+        confirmLabel="Начать заново"
+        danger
+        onConfirm={startNew}
+        onClose={() => setConfirmNew(false)}
       />
     </div>
   )

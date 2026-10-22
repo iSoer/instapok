@@ -1,4 +1,5 @@
 import type {
+  Inventory,
   BattleAction,
   BattleEvent,
   BattleState,
@@ -14,6 +15,7 @@ import type {
 import { STATS, manhattan, posKey } from "../types"
 import { livingUnits, otherSide, unitAt } from "./query"
 import { planAssist } from "./assist"
+import { itemTargetsFrom, planItem } from "./items"
 import { pathTo, reachableTiles, targetsFrom, wallsFrom } from "../map/pathing"
 import { simulateCombat } from "../combat"
 import { specialMaxCd, unitKit, xpMultiplier } from "../skills/engine"
@@ -27,6 +29,8 @@ export interface CreateBattleOptions {
   squad: UnitInstance[]
   seed: number
   now: number
+  /** Рюкзак вылазки (уже списан из инвентаря). */
+  pack?: Inventory
 }
 
 function makeBattleUnit(
@@ -69,7 +73,8 @@ export function createBattle(opts: CreateBattleOptions): ReduceResult {
     stats: { kills: 0, damage: 0, turns: 0, deaths: [], xpGained: {}, loot: 0 },
     spawnedWaves: [],
     enemyQueue: null,
-    startedAt: opts.now
+    startedAt: opts.now,
+    pack: { ...(opts.pack ?? {}) }
   }
   opts.map.tiles.forEach((row, y) =>
     row.forEach((t, x) => {
@@ -325,6 +330,36 @@ export function applyAction(prev: BattleState, action: BattleAction): ReduceResu
       moveUnit(state, bu, action.to, events)
       finishAction(state, bu, action.newStance)
       events.push({ type: "waited", unitId: bu.unitId })
+      break
+    }
+    case "item": {
+      const bu = validateActor(state, action.unitId)
+      if (bu.side !== "player") throw new Error("предметы только у отряда")
+      if ((state.pack[action.itemId] ?? 0) <= 0) throw new Error("предмета нет в рюкзаке")
+      moveUnit(state, bu, action.to, events)
+      if (!itemTargetsFrom(state, bu, bu.pos, action.itemId).some(u => u.unitId === action.targetId))
+        throw new Error("цель вне досягаемости")
+      const plan = planItem(state, bu, bu.pos, action.targetId, action.itemId)
+      for (const h of plan.heals) {
+        const u = state.units[h.unitId]
+        if (u) u.hp = h.hpAfter
+      }
+      for (const id of plan.cleansed) {
+        const u = state.units[id]
+        if (u) u.penalties = {}
+      }
+      const left = (state.pack[action.itemId] ?? 0) - 1
+      if (left > 0) state.pack[action.itemId] = left
+      else delete state.pack[action.itemId]
+      events.push({
+        type: "item",
+        unitId: bu.unitId,
+        targetId: action.targetId,
+        itemId: action.itemId,
+        heals: plan.heals,
+        cleansed: plan.cleansed
+      })
+      finishAction(state, bu, action.newStance)
       break
     }
     case "attackWall": {

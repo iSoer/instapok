@@ -13,7 +13,7 @@ import {
   startBattle,
   toggleSquad
 } from "@game/state/save"
-import { createEmptySave, parseSave, serializeSave } from "@game/core/save"
+import { SAVE_VERSION, createEmptySave, parseSave, serializeSave } from "@game/core/save"
 import { lootFor, rosterLevel, unitPrice } from "@game/core/progression"
 import { BARRACKS_CAP, SQUAD_SIZE } from "@game/core/types"
 import { ROSTER, SHOP } from "@game/content/balance"
@@ -170,7 +170,7 @@ describe("сейв", () => {
     const r = parseSave(JSON.stringify(raw))
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.save.version).toBe(5)
+      expect(r.save.version).toBe(SAVE_VERSION)
       expect(r.save.army!.units.length).toBe(ROSTER.size)
       expect("hiresSinceBattle" in r.save.profile).toBe(false)
     }

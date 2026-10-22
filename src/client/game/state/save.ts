@@ -1,6 +1,9 @@
 import { atom, computed } from "nanostores"
 import type {
   Army,
+  Facing,
+  Inventory,
+  Pos,
   BattleAction,
   BattleEvent,
   BattleState,
@@ -20,10 +23,26 @@ import {
   isUniqueClassId,
   learnSkill,
   equipSkill,
+  equipWeapon,
   reclassUnit,
   skillCost
 } from "@game/core/units"
-import type { WeaponSkill } from "@shared/character/skills"
+import {
+  addAll,
+  addItem,
+  generateStore,
+  inStore,
+  isWoodWeapon,
+  itemCategory,
+  itemCount,
+  itemPrice,
+  removeItem,
+  totalCount,
+  unitGear
+} from "@game/core/items"
+import { isConsumableId, isTalismanId } from "@game/content/items"
+import { ITEMS } from "@game/content/balance"
+import { HERO_RETURN } from "@game/content/village"
 import { generateMap } from "@game/core/map/generate"
 import { applyAction, createBattle } from "@game/core/battle/reducer"
 import {
@@ -38,6 +57,7 @@ import {
   trainUnit
 } from "@game/core/progression"
 import { difficultyDef } from "@game/content/balance"
+import { invalidateKit } from "@game/core/skills/engine"
 import { BIOMES } from "@game/content/biomes"
 import { clearLocal, loadLocal, saveLocal } from "@game/platform/storage"
 import { setHapticsEnabled } from "@game/platform/haptics"
@@ -57,6 +77,13 @@ export const $memorial = computed($save, s => s.memorial)
 export const $lastBattle = computed($save, s => s.lastBattle)
 export const $pendingBattle = computed($save, s => s.pendingBattle)
 export const $rewardChoice = computed($save, s => s.rewardChoice)
+export const $inventory = computed($save, s => s.inventory)
+export const $store = computed($save, s => s.store)
+
+/** Начата ли игра: на главном экране есть «Продолжить». */
+export function gameStarted(save: SaveGame): boolean {
+  return save.profile.startedAt !== undefined
+}
 
 export const $unlockedBiomes = computed($save, (s) => {
   const totalWins = Object.values(s.profile.wins).reduce((a, b) => a + b, 0)
@@ -124,6 +151,7 @@ export function initSave(): void {
  * первые 4 — в отряде. Заодно заполняет пустую витрину магазина.
  */
 export function ensureRoster(): void {
+  ensureStore()
   const s = $save.get()
   if (s.army && s.army.units.length > 0) {
     if (s.shelter.candidates.length === 0)
@@ -155,6 +183,24 @@ export function ensureRoster(): void {
     delete next.rewardChoice
     return next
   })
+}
+
+/** Сгенерировать ассортимент Лавки, если его ещё нет (новый сейв или миграция с v5). */
+export function ensureStore(): void {
+  if ($save.get().store.weapons.length > 0) return
+  updateSave(st => ({ ...st, store: generateStore(randomSeed(), st.army, st.profile.glory) }))
+}
+
+/**
+ * Новая игра: всё, кроме Настроек, стирается (ростер, инвентарь, Слава, Кладбище), выдаётся стартовый ростер,
+ * герой — на площади деревни.
+ */
+export function newGame(): void {
+  const now = Date.now()
+  const settings = $save.get().settings
+  const fresh = createEmptySave(now)
+  updateSave(() => ({ ...fresh, settings, profile: { ...fresh.profile, startedAt: now } }))
+  ensureRoster()
 }
 
 /** Свободные места в ростере (из 20). */
@@ -279,11 +325,7 @@ export function equipAction(
 }
 
 /** Смена класса FW: класс открыт на уровне бойца, божественный — только у одного бойца армии. */
-export function reclassAction(
-  unitId: string,
-  classId: string,
-  weaponSkill?: WeaponSkill
-): { ok: boolean, error?: string } {
+export function reclassAction(unitId: string, classId: string): { ok: boolean, error?: string } {
   const s = $save.get()
   const unit = s.army?.units.find(u => u.id === unitId)
   if (!s.army || !unit) return { ok: false, error: "нет бойца" }
@@ -291,9 +333,96 @@ export function reclassAction(
   if (isUniqueClassId(classId) && s.army.units.some(u => u.id !== unitId && u.classId === classId)) {
     return { ok: false, error: "Божественный класс уже у другого бойца" }
   }
-  const next = reclassUnit(unit, classId, weaponSkill)
+  const next = reclassUnit(unit, classId)
   updateSave(st => ({ ...st, army: replaceUnit(st.army as Army, next) }))
   return { ok: true }
+}
+
+/* ---------- Лавка и снаряжение ---------- */
+
+/** Купить предмет из ассортимента Лавки в инвентарь армии. */
+export function buyItemAction(itemId: string): { ok: boolean, error?: string } {
+  const s = $save.get()
+  if (!inStore(s.store, itemId)) return { ok: false, error: "Такого товара нет" }
+  const price = itemPrice(itemId)
+  if (s.profile.treats < price) return { ok: false, error: "Недостаточно Вкусняшек" }
+  if (itemCount(s.inventory, itemId) >= ITEMS.stackCap) return { ok: false, error: "Больше не унести" }
+  updateSave(st => ({
+    ...st,
+    inventory: addItem(st.inventory, itemId),
+    profile: { ...st.profile, treats: st.profile.treats - price }
+  }))
+  return { ok: true }
+}
+
+/** Торговец показал новый ассортимент — снять «!» над ним. */
+export function markStoreSeen(): void {
+  if ($save.get().store.fresh) updateSave(st => ({ ...st, store: { ...st.store, fresh: false } }))
+}
+
+/**
+ * Дать бойцу оружие: из инвентаря или бесплатное деревянное любого навыка. Прежнее купленное оружие возвращается
+ * в инвентарь, деревянное просто откладывается.
+ */
+export function equipWeaponAction(unitId: string, weaponId: string): { ok: boolean, error?: string } {
+  const s = $save.get()
+  const unit = s.army?.units.find(u => u.id === unitId)
+  if (!s.army || !unit) return { ok: false, error: "нет бойца" }
+  if (itemCategory(weaponId) !== "weapon") return { ok: false, error: "Это не оружие" }
+  if (unit.skills.weapon === weaponId) return { ok: true }
+  if (!isWoodWeapon(weaponId) && itemCount(s.inventory, weaponId) < 1) return { ok: false, error: "Нет в инвентаре" }
+  const next = equipWeapon(unit, weaponId)
+  updateSave((st) => {
+    let inventory = isWoodWeapon(weaponId) ? st.inventory : removeItem(st.inventory, weaponId)
+    inventory = addItem(inventory, unit.skills.weapon)
+    return { ...st, inventory, army: replaceUnit(st.army as Army, next) }
+  })
+  return { ok: true }
+}
+
+/** Надеть талисман из инвентаря (прежний возвращается) или снять (`undefined`). */
+export function equipTalismanAction(unitId: string, talismanId: string | undefined): { ok: boolean, error?: string } {
+  const s = $save.get()
+  const unit = s.army?.units.find(u => u.id === unitId)
+  if (!s.army || !unit) return { ok: false, error: "нет бойца" }
+  if (talismanId && !isTalismanId(talismanId)) return { ok: false, error: "Это не талисман" }
+  if (talismanId === unit.accessory) return { ok: true }
+  if (talismanId && itemCount(s.inventory, talismanId) < 1) return { ok: false, error: "Нет в инвентаре" }
+  const next: UnitInstance = { ...unit }
+  if (talismanId) next.accessory = talismanId
+  else delete next.accessory
+  invalidateKit(unit)
+  updateSave((st) => {
+    let inventory = talismanId ? removeItem(st.inventory, talismanId) : st.inventory
+    if (unit.accessory) inventory = addItem(inventory, unit.accessory)
+    return { ...st, inventory, army: replaceUnit(st.army as Army, next) }
+  })
+  return { ok: true }
+}
+
+/** Рюкзак вылазки: расходники из инвентаря, всего не больше `ITEMS.packSize`. Списываются при старте боя. */
+export function setPackAction(pack: Inventory): { ok: boolean, error?: string } {
+  const s = $save.get()
+  if (!s.pendingBattle) return { ok: false, error: "Сначала разведайте бой" }
+  const clean: Inventory = {}
+  for (const [id, n] of Object.entries(pack)) {
+    if (n <= 0) continue
+    if (!isConsumableId(id)) return { ok: false, error: "В рюкзак — только расходники" }
+    if (itemCount(s.inventory, id) < n) return { ok: false, error: "Столько нет в инвентаре" }
+    clean[id] = n
+  }
+  if (totalCount(clean) > ITEMS.packSize) return { ok: false, error: `В рюкзак влезает ${ITEMS.packSize}` }
+  updateSave(st => (st.pendingBattle ? { ...st, pendingBattle: { ...st.pendingBattle, pack: clean } } : st))
+  return { ok: true }
+}
+
+/* ---------- Деревня ---------- */
+
+/** Запомнить, где стоит герой (сцена зовёт это при остановке и уходе, а не каждый кадр). */
+export function setHeroPosition(pos: Pos, facing: Facing): void {
+  const v = $save.get().village
+  if (Math.abs(v.pos.x - pos.x) < 0.01 && Math.abs(v.pos.y - pos.y) < 0.01 && v.facing === facing) return
+  updateSave(st => ({ ...st, village: { pos: { x: pos.x, y: pos.y }, facing } }))
 }
 
 export function sharpenAction(unitId: string): { ok: boolean, error?: string } {
@@ -318,7 +447,12 @@ export function releaseUnit(unitId: string): { ok: boolean, armyFell?: boolean }
   const now = Date.now()
   const remaining = s.army.units.filter(u => u.id !== unitId)
   updateSave((st) => {
-    const next: SaveGame = { ...st, memorial: [...st.memorial, memorialEntry(unit, "released", now)] }
+    const next: SaveGame = {
+      ...st,
+      memorial: [...st.memorial, memorialEntry(unit, "released", now)],
+      // Отпущенный оставляет купленное оружие и талисман
+      inventory: addAll(st.inventory, unitGear(unit))
+    }
     if (remaining.length === 0) {
       delete next.army
       next.stats = { ...st.stats, armiesLost: st.stats.armiesLost + 1 }
@@ -342,6 +476,7 @@ export function scoutBattle(difficulty: Difficulty, biomeId: string | "random"):
   if (!difficultyUnlocked(s, difficulty)) return { ok: false, error: "Сложность закрыта" }
   const pb = s.pendingBattle
   if (pb && pb.difficulty === difficulty && pb.biomeId === biomeId) return { ok: true }
+  const pack = pb?.pack
   const seed = pb?.seed ?? randomSeed()
   const map = generateMap({
     seed,
@@ -352,7 +487,7 @@ export function scoutBattle(difficulty: Difficulty, biomeId: string | "random"):
     unlockedBiomes: $unlockedBiomes.get(),
     now: Date.now()
   })
-  updateSave(st => ({ ...st, pendingBattle: { seed, difficulty, biomeId, map } }))
+  updateSave(st => ({ ...st, pendingBattle: { seed, difficulty, biomeId, map, ...(pack ? { pack } : {}) } }))
   return { ok: true }
 }
 
@@ -366,10 +501,25 @@ export function startBattle(squadIds: string[]): { ok: boolean, error?: string, 
   const squad = squadIds.map(id => s.army?.units.find(u => u.id === id)).filter((u): u is UnitInstance => !!u)
   if (squad.length === 0) return { ok: false, error: "Пустой отряд" }
   if (squad.length > SQUAD_SIZE) return { ok: false, error: `В отряде не больше ${SQUAD_SIZE}` }
-  const { state, events } = createBattle({ map: pb.map, squad, seed: createRng(pb.seed).fork("battle").seed, now: Date.now() })
+  // Рюкзак списывается из инвентаря (то, чего уже нет, не берётся); остаток вернётся после боя
+  const pack: Inventory = {}
+  for (const [id, n] of Object.entries(pb.pack ?? {})) {
+    const take = Math.min(n, itemCount(s.inventory, id))
+    if (take > 0) pack[id] = take
+  }
+  const { state, events } = createBattle({
+    map: pb.map,
+    squad,
+    seed: createRng(pb.seed).fork("battle").seed,
+    now: Date.now(),
+    pack
+  })
   updateSave((st) => {
+    let inventory = st.inventory
+    for (const [id, n] of Object.entries(pack)) inventory = removeItem(inventory, id, n)
     const next: SaveGame = {
       ...st,
+      inventory,
       battle: state,
       army: st.army ? { ...st.army, squadIds: squad.map(u => u.id) } : st.army
     }
@@ -408,6 +558,10 @@ export function finishBattle(): BattleSummary | null {
       profile: res.profile,
       memorial: res.memorial,
       shelter: res.shelter,
+      inventory: res.inventory,
+      store: res.store,
+      // После боя герой возвращается в деревню к домику Вылазок
+      village: { pos: { ...HERO_RETURN }, facing: "down" },
       lastBattle: res.summary,
       stats: {
         ...st.stats,

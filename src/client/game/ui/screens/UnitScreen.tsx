@@ -22,7 +22,7 @@ import { skillInfo } from "@game/content/index"
 import { traitDef } from "@game/content/traits"
 import { breedDef } from "@game/content/breeds"
 import { personalityText } from "@game/content/personalities"
-import { basicWeaponId, weaponsForSkill } from "@game/content/weapons"
+import { talismanDef } from "@game/content/items"
 import {
   $save,
   equipAction,
@@ -42,10 +42,10 @@ import { StatBar, StatsGrid } from "../components/Stats"
 import { BottomSheet, ConfirmModal } from "../components/Sheet"
 import { useToast } from "../components/Toast"
 import { ClassSheet, SkillRanks, aptitudeLine, weaponLine } from "../components/CharacterPanels"
+import { TalismanSheet, WeaponSheet } from "../components/GearSheet"
 import { STAT_LABELS, atkLabel, fmtGains, speciesName } from "../lib/format"
 import { useReplay } from "../lib/animate"
 import { haptic } from "@game/platform/haptics"
-import type { WeaponSkill } from "@shared/character/skills"
 
 const SLOT_NAMES: Record<keyof UnitSkills, string> = {
   weapon: "Оружие",
@@ -63,13 +63,15 @@ const SLOT_ICONS: Record<keyof UnitSkills, string> = {
   b: "B",
   c: "C"
 }
-const SLOTS: (keyof UnitSkills)[] = ["weapon", "assist", "special", "a", "b", "c"]
+/** Оружие — предмет (блок «Снаряжение»), в навыках — только изучаемое за SP. */
+const SLOTS: (keyof UnitSkills)[] = ["assist", "special", "a", "b", "c"]
 
 export function UnitScreen({ unitId }: { unitId: string }) {
   const save = useStore($save)
   const [slot, setSlot] = useState<keyof UnitSkills | null>(null)
   const [release, setRelease] = useState<0 | 1 | 2>(0)
   const [classOpen, setClassOpen] = useState(false)
+  const [gear, setGear] = useState<"weapon" | "talisman" | null>(null)
   const [toastEl, toast] = useToast()
   const [bounceKey, replayBounce] = useReplay()
   const [happy, setHappy] = useState(false)
@@ -108,8 +110,8 @@ export function UnitScreen({ unitId }: { unitId: string }) {
     celebrate()
     toast(`Уровень ${unit.level + 1}! ${fmtGains(gains)}`)
   }
-  const onReclass = (classId: string, weaponSkill: WeaponSkill) => {
-    const r = reclassAction(unit.id, classId, weaponSkill)
+  const onReclass = (classId: string) => {
+    const r = reclassAction(unit.id, classId)
     if (!r.ok) return toast(r.error ?? "Ошибка", true)
     haptic("success")
     celebrate()
@@ -128,21 +130,12 @@ export function UnitScreen({ unitId }: { unitId: string }) {
     setRelease(0)
     if (!r.ok) return
     haptic("warning")
-    navigate(r.armyFell ? "/" : "/army", true)
+    navigate("/army", true)
   }
 
   const slotOptions = (s: keyof UnitSkills): { id: string, state: "equipped" | "learned" | "learnable" }[] => {
     const out: { id: string, state: "equipped" | "learned" | "learnable" }[] = []
     const equipped = unit.skills[s]
-    if (s === "weapon") {
-      const ids = [basicWeaponId(cls.weaponSkill), ...weaponsForSkill(cls.weaponSkill).map(w => w.id)]
-      for (const id of [...new Set(ids)]) {
-        if (id === equipped) out.push({ id, state: "equipped" })
-        else if (unit.learned.includes(id) || id === basicWeaponId(cls.weaponSkill)) out.push({ id, state: "learned" })
-        else if (learnable.includes(id)) out.push({ id, state: "learnable" })
-      }
-      return out
-    }
     if (equipped) out.push({ id: equipped, state: "equipped" })
     for (const id of unit.learned) if (id !== equipped && slotOf(id) === s) out.push({ id, state: "learned" })
     for (const id of learnable) if (slotOf(id) === s) out.push({ id, state: "learnable" })
@@ -288,6 +281,28 @@ export function UnitScreen({ unitId }: { unitId: string }) {
           </div>
         )}
 
+        <div className="card stack pop-in" style={{ animationDelay: "120ms" }}>
+          <b>Снаряжение</b>
+          <div className="slot" onClick={() => setGear("weapon")}>
+            <span className="slot-ico">⚔️</span>
+            <span className="slot-text">
+              <div className="slot-name">Оружие</div>
+              <div className="slot-value">{weaponLine(unit)}</div>
+            </span>
+            <span className="muted">›</span>
+          </div>
+          <div className="slot" onClick={() => setGear("talisman")}>
+            <span className="slot-ico">🔮</span>
+            <span className="slot-text">
+              <div className="slot-name">Талисман</div>
+              <div className={`slot-value ${unit.accessory ? "" : "empty"}`}>
+                {unit.accessory ? `${talismanDef(unit.accessory).icon} ${talismanDef(unit.accessory).name}` : "— пусто —"}
+              </div>
+            </span>
+            <span className="muted">›</span>
+          </div>
+        </div>
+
         <div className="card stack pop-in" style={{ animationDelay: "140ms" }}>
           <b>Навыки</b>
           {SLOTS.map((s) => {
@@ -395,7 +410,7 @@ export function UnitScreen({ unitId }: { unitId: string }) {
               )
             })}
             {slotOptions(slot).length === 0 && <p className="muted">Нет доступных навыков для этого слота.</p>}
-            {slot !== "weapon" && unit.skills[slot] && (
+            {unit.skills[slot] && (
               <Button block ghost onClick={() => onEquip(slot, undefined)}>
                 Снять
               </Button>
@@ -410,6 +425,9 @@ export function UnitScreen({ unitId }: { unitId: string }) {
         )}
       </BottomSheet>
 
+      <WeaponSheet unit={unit} open={gear === "weapon"} onClose={() => setGear(null)} toast={toast} />
+      <TalismanSheet unit={unit} open={gear === "talisman"} onClose={() => setGear(null)} toast={toast} />
+
       <ClassSheet
         unit={unit}
         army={army.units}
@@ -421,7 +439,8 @@ export function UnitScreen({ unitId }: { unitId: string }) {
       <ConfirmModal
         open={release === 1}
         title="Отпустить бойца?"
-        text={`${displayName(unit)} уйдёт навсегда и попадёт на Кладбище с пометкой «ушёл сам».`}
+        text={`${displayName(unit)} уйдёт навсегда и попадёт на Кладбище с пометкой «ушёл сам». `
+          + "Купленное оружие и талисман вернутся в инвентарь."}
         confirmLabel="Отпустить"
         danger
         onConfirm={() => setRelease(2)}
